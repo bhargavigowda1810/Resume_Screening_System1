@@ -4,11 +4,25 @@ export const api = {
   get: async (endpoint) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`);
 
+    const contentType = response.headers.get("content-type") || "";
+
     if (!response.ok) {
-      throw new Error(`GET ${endpoint} failed`);
+      const errorMessage = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
+
+      throw new Error(
+        typeof errorMessage === "string"
+          ? errorMessage
+          : errorMessage.message || `GET ${endpoint} failed`
+      );
     }
 
-    return response.json();
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    return response.text();
   },
 
   post: async (endpoint, data) => {
@@ -20,11 +34,25 @@ export const api = {
       body: JSON.stringify(data),
     });
 
+    const contentType = response.headers.get("content-type") || "";
+
     if (!response.ok) {
-      throw new Error(`POST ${endpoint} failed`);
+      const errorMessage = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
+
+      throw new Error(
+        typeof errorMessage === "string"
+          ? errorMessage
+          : errorMessage.message || `POST ${endpoint} failed`
+      );
     }
 
-    return response.json();
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    return response.text();
   },
 
   put: async (endpoint, data) => {
@@ -36,11 +64,25 @@ export const api = {
       body: JSON.stringify(data),
     });
 
+    const contentType = response.headers.get("content-type") || "";
+
     if (!response.ok) {
-      throw new Error(`PUT ${endpoint} failed`);
+      const errorMessage = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
+
+      throw new Error(
+        typeof errorMessage === "string"
+          ? errorMessage
+          : errorMessage.message || `PUT ${endpoint} failed`
+      );
     }
 
-    return response.json();
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    return response.text();
   },
 
   delete: async (endpoint) => {
@@ -48,10 +90,24 @@ export const api = {
       method: "DELETE",
     });
 
+    const contentType = response.headers.get("content-type") || "";
+
     if (!response.ok) {
-      throw new Error(`DELETE ${endpoint} failed`);
+      const errorMessage = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
+
+      throw new Error(
+        typeof errorMessage === "string"
+          ? errorMessage
+          : errorMessage.message || `DELETE ${endpoint} failed`
+      );
     }
 
-    return response.json();
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    return response.text();
   },
 };

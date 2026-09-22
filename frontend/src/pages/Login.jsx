@@ -9,6 +9,7 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,6 +17,12 @@ function Login() {
     event.preventDefault();
 
     setError("");
+
+    if (!loginType) {
+      setError("Please select Applicant or Recruiter.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -24,9 +31,7 @@ function Login() {
         password,
       });
 
-      console.log("Login successful:", response);
-
-      // Check whether the selected login type matches the user's role
+      // Check selected login type against actual account role
       if (
         loginType === "APPLICANT" &&
         response.role !== "APPLICANT"
@@ -43,7 +48,7 @@ function Login() {
         return;
       }
 
-      // Save logged-in user information
+      // Save logged-in user
       localStorage.setItem("user", JSON.stringify(response));
 
       // Redirect based on role
@@ -54,7 +59,6 @@ function Login() {
       } else {
         setError("Unknown user role.");
       }
-
     } catch (error) {
       console.error("Login failed:", error);
       setError("Invalid email or password.");
@@ -63,101 +67,333 @@ function Login() {
     }
   };
 
+  const resetLoginType = () => {
+    setLoginType("");
+    setEmail("");
+    setPassword("");
+    setError("");
+    setShowPassword(false);
+  };
+
   return (
-    <div>
-      <h1>Resume Screening System</h1>
+    <div className="login-page">
 
-      <h2>Login</h2>
+      {/* Left branding section */}
+      <section className="login-brand">
 
-      {/* Login Type Selection */}
-      {!loginType && (
-        <div>
-          <h3>Login As</h3>
+        <div className="login-brand-overlay"></div>
 
-          <button
-            type="button"
-            onClick={() => setLoginType("APPLICANT")}
-          >
-            Applicant Login
-          </button>
+        <div className="login-brand-content">
 
-          <button
-            type="button"
-            onClick={() => setLoginType("RECRUITER")}
-          >
-            Recruiter Login
-          </button>
-        </div>
-      )}
+          <div className="login-logo">
+            RS
+          </div>
 
-      {/* Login Form */}
-      {loginType && (
-        <div>
-          <h3>
-            {loginType === "APPLICANT"
-              ? "Applicant Login"
-              : "Recruiter Login"}
-          </h3>
+          <div className="login-brand-label">
+            RESUME SCREENING SYSTEM
+          </div>
 
-          <form onSubmit={handleLogin}>
+          <h1>
+            Find the right
+            <br />
+            <span>Job and candidate faster.</span>
+          </h1>
 
-            <div>
-              <label>Email</label>
+          <p className="login-brand-description">
+            A smarter way to screen resumes, discover qualified
+            candidates, and simplify the recruitment process.
+          </p>
 
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
+          <div className="login-features">
+
+            <div className="login-feature">
+              <div className="login-feature-icon">✓</div>
+              <div>
+                <strong>AI-powered screening</strong>
+                <span>Analyze resumes intelligently</span>
+              </div>
             </div>
 
-            <div>
-              <label>Password</label>
-
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
+            <div className="login-feature">
+              <div className="login-feature-icon">✓</div>
+              <div>
+                <strong>Smart candidate ranking</strong>
+                <span>Find the most relevant candidates</span>
+              </div>
             </div>
 
-            {error && (
-              <p>{error}</p>
-            )}
+            <div className="login-feature">
+              <div className="login-feature-icon">✓</div>
+              <div>
+                <strong>Faster hiring decisions</strong>
+                <span>Reduce manual screening effort</span>
+              </div>
+            </div>
 
-            <button type="submit" disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
-            </button>
+          </div>
 
-          </form>
-
-          {/* Change Login Type */}
-          <button
-            type="button"
-            onClick={() => {
-              setLoginType("");
-              setEmail("");
-              setPassword("");
-              setError("");
-            }}
-          >
-            Change Login Type
-          </button>
         </div>
-      )}
 
-      {/* Registration */}
-      <p>
-        Don't have an account?{" "}
-        <Link to="/register">Register</Link>
-      </p>
+        <div className="login-brand-footer">
+          Resume Screening & Ranking System
+        </div>
+
+      </section>
+
+      {/* Login section */}
+      <section className="login-panel">
+
+        <div className="login-card">
+
+          {/* Mobile logo */}
+          <div className="login-mobile-logo">
+            RS
+          </div>
+
+          <div className="login-heading">
+
+            <span className="login-eyebrow">
+              ACCOUNT ACCESS
+            </span>
+
+            <h2>
+              Welcome back
+            </h2>
+
+            <p>
+              Sign in to continue to your account
+            </p>
+
+          </div>
+
+          {/* Login type selection */}
+          {!loginType && (
+            <div className="login-role-selection">
+
+              <div className="login-section-label">
+                Continue as
+              </div>
+
+              <div className="login-role-grid">
+
+                <button
+                  type="button"
+                  className="login-role-card"
+                  onClick={() => setLoginType("APPLICANT")}
+                >
+                  <div className="login-role-icon applicant-icon">
+                    👤
+                  </div>
+
+                  <div className="login-role-content">
+                    <strong>Applicant</strong>
+                    <span>Search and apply for jobs</span>
+                  </div>
+
+                  <div className="login-role-arrow">
+                    →
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="login-role-card"
+                  onClick={() => setLoginType("RECRUITER")}
+                >
+                  <div className="login-role-icon recruiter-icon">
+                    💼
+                  </div>
+
+                  <div className="login-role-content">
+                    <strong>Recruiter</strong>
+                    <span>Manage jobs and candidates</span>
+                  </div>
+
+                  <div className="login-role-arrow">
+                    →
+                  </div>
+                </button>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* Login form */}
+          {loginType && (
+            <div className="login-form-section">
+
+              {/* Selected role */}
+              <div className="login-selected-role">
+
+                <div className="login-selected-role-info">
+
+                  <div className="login-selected-role-icon">
+                    {loginType === "APPLICANT" ? "👤" : "💼"}
+                  </div>
+
+                  <div>
+                    <span>Signing in as</span>
+                    <strong>
+                      {loginType === "APPLICANT"
+                        ? "Applicant"
+                        : "Recruiter"}
+                    </strong>
+                  </div>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetLoginType}
+                  className="login-change-role"
+                >
+                  Change
+                </button>
+
+              </div>
+
+              <form onSubmit={handleLogin}>
+
+                {/* Email */}
+                <div className="login-input-group">
+
+                  <label htmlFor="login-email">
+                    Email address
+                  </label>
+
+                  <div className="login-input-wrapper">
+
+                    <span className="login-input-icon">
+                      @
+                    </span>
+
+                    <input
+                      id="login-email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(event) =>
+                        setEmail(event.target.value)
+                      }
+                      required
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* Password */}
+                <div className="login-input-group">
+
+                  <label htmlFor="login-password">
+                    Password
+                  </label>
+
+                  <div className="login-password-wrapper">
+
+                    <span className="login-input-icon">
+                      •
+                    </span>
+
+                    <input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(event) =>
+                        setPassword(event.target.value)
+                      }
+                      required
+                    />
+
+                    <button
+                      type="button"
+                      className="login-password-toggle"
+                      onClick={() =>
+                        setShowPassword(!showPassword)
+                      }
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+
+                  </div>
+
+                </div>
+
+                {/* Forgot password */}
+                <div className="login-forgot-row">
+
+                  <button
+                    type="button"
+                    className="login-forgot-button"
+                    onClick={() =>
+                      navigate("/forgot-password")
+                    }
+                  >
+                    Forgot Password?
+                  </button>
+
+                </div>
+
+                {/* Error */}
+                {error && (
+                  <div className="login-error">
+                    <span className="login-error-icon">
+                      !
+                    </span>
+
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {/* Login button */}
+                <button
+                  type="submit"
+                  className="login-submit-button"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <span className="login-spinner"></span>
+                      Signing in...
+                    </>
+                  ) : (
+                    <>
+                      Sign In
+                      <span>→</span>
+                    </>
+                  )}
+                </button>
+
+              </form>
+
+            </div>
+          )}
+
+          {/* Register */}
+          <div className="login-register">
+
+            <span>
+              Don't have an account?
+            </span>
+
+            <Link to="/register">
+              Create an account
+            </Link>
+
+          </div>
+
+          <div className="login-security-note">
+            Your account information is securely protected.
+          </div>
+
+        </div>
+
+      </section>
+
     </div>
   );
 }
 
 export default Login;
-

@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { api } from "../../services/api";
 
 function ViewApplicants() {
+  const { jobId } = useParams();
+
   const [jobs, setJobs] = useState([]);
-  const [selectedJobId, setSelectedJobId] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState(jobId || "");
   const [applications, setApplications] = useState([]);
   const [screeningResults, setScreeningResults] = useState([]);
 
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
-  const [screeningApplicationId, setScreeningApplicationId] = useState(null);
+  const [screeningApplicationId, setScreeningApplicationId] =
+    useState(null);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
 
   // =========================================================
   // LOAD RECRUITER JOBS
@@ -22,17 +27,47 @@ function ViewApplicants() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem("user"));
+        const user = JSON.parse(
+          localStorage.getItem("user")
+        );
 
         if (!user?.userId) {
-          setError("Recruiter information not found. Please login again.");
+          setError(
+            "Recruiter information not found. Please login again."
+          );
           return;
         }
 
-        const data = await api.get(`/jobs/recruiter/${user.userId}`);
+        const data = await api.get(
+          `/jobs/recruiter/${user.userId}`
+        );
+
         setJobs(data);
+
+        /*
+         * If a jobId is present in the URL,
+         * automatically select that job.
+         */
+        if (jobId) {
+          const jobExists = data.some(
+            (job) => String(job.jobId) === String(jobId)
+          );
+
+          if (jobExists) {
+            setSelectedJobId(String(jobId));
+          } else {
+            setError(
+              "The selected job was not found in your job postings."
+            );
+            setSelectedJobId("");
+          }
+        }
       } catch (error) {
-        console.error("Failed to load jobs:", error);
+        console.error(
+          "Failed to load jobs:",
+          error
+        );
+
         setError("Failed to load your jobs.");
       } finally {
         setLoadingJobs(false);
@@ -40,54 +75,107 @@ function ViewApplicants() {
     };
 
     fetchJobs();
-  }, []);
+  }, [jobId]);
+
 
   // =========================================================
   // LOAD APPLICATIONS + SCREENING RESULTS
   // =========================================================
 
-  const handleJobChange = async (event) => {
-    const jobId = event.target.value;
+  const loadJobData = async (selectedId) => {
+    if (!selectedId) {
+      setApplications([]);
+      setScreeningResults([]);
+      return;
+    }
 
-    setSelectedJobId(jobId);
     setApplications([]);
     setScreeningResults([]);
     setError("");
     setMessage("");
 
-    if (!jobId) {
-      return;
-    }
+    // -------------------------------------------------------
+    // LOAD APPLICATIONS
+    // -------------------------------------------------------
 
-    // Load applications
     setLoadingApplications(true);
 
     try {
-      const data = await api.get(`/applications/job/${jobId}`);
+      const data = await api.get(
+        `/applications/job/${selectedId}`
+      );
+
       setApplications(data);
     } catch (error) {
-      console.error("Failed to load applicants:", error);
-      setError("Failed to load applicants for this job.");
+      console.error(
+        "Failed to load applicants:",
+        error
+      );
+
+      setError(
+        "Failed to load applicants for this job."
+      );
     } finally {
       setLoadingApplications(false);
     }
 
-    // Load screening results
+
+    // -------------------------------------------------------
+    // LOAD SCREENING RESULTS
+    // -------------------------------------------------------
+
     setLoadingResults(true);
 
     try {
       const results = await api.get(
-        `/screening-results/job/${jobId}/ranking`
+        `/screening-results/job/${selectedId}/ranking`
       );
 
       setScreeningResults(results);
     } catch (error) {
-      console.error("Failed to load screening results:", error);
+      console.error(
+        "Failed to load screening results:",
+        error
+      );
+
       setScreeningResults([]);
     } finally {
       setLoadingResults(false);
     }
   };
+
+
+  // =========================================================
+  // AUTOMATICALLY LOAD JOB FROM URL
+  // =========================================================
+
+  useEffect(() => {
+    if (!loadingJobs && selectedJobId) {
+      loadJobData(selectedJobId);
+    }
+  }, [loadingJobs, selectedJobId]);
+
+
+  // =========================================================
+  // MANUAL JOB CHANGE
+  // =========================================================
+
+  const handleJobChange = async (event) => {
+    const newJobId = event.target.value;
+
+    setSelectedJobId(newJobId);
+
+    if (!newJobId) {
+      setApplications([]);
+      setScreeningResults([]);
+      setError("");
+      setMessage("");
+      return;
+    }
+
+    await loadJobData(newJobId);
+  };
+
 
   // =========================================================
   // RUN SCREENING
@@ -99,13 +187,15 @@ function ViewApplicants() {
     setMessage("");
 
     try {
-      await api.post(`/screening/application/${applicationId}`, {});
+      await api.post(
+        `/screening/application/${applicationId}`,
+        {}
+      );
 
       setMessage(
         `Screening completed successfully for Application ${applicationId}.`
       );
 
-      // Refresh ranking
       if (selectedJobId) {
         const results = await api.get(
           `/screening-results/job/${selectedJobId}/ranking`
@@ -114,7 +204,10 @@ function ViewApplicants() {
         setScreeningResults(results);
       }
     } catch (error) {
-      console.error("Screening failed:", error);
+      console.error(
+        "Screening failed:",
+        error
+      );
 
       setError(
         `Screening failed for Application ${applicationId}.`
@@ -124,29 +217,30 @@ function ViewApplicants() {
     }
   };
 
+
   // =========================================================
-  // LOADING
+  // VIEW RESUME
   // =========================================================
 
-  if (loadingJobs) {
-    return (
-      <div className="screening-page">
-        <div className="screening-loading">
-          Loading jobs...
-        </div>
-      </div>
-    );
-  }
+  const handleViewResume = (resumeId) => {
+    if (!resumeId) {
+      setError(
+        "Resume is not available for this applicant."
+      );
 
-  if (error && jobs.length === 0) {
-    return (
-      <div className="screening-page">
-        <div className="screening-error">
-          {error}
-        </div>
-      </div>
+      return;
+    }
+
+    const resumeUrl =
+      `http://localhost:8081/api/resumes/${resumeId}/file`;
+
+    window.open(
+      resumeUrl,
+      "_blank",
+      "noopener,noreferrer"
     );
-  }
+  };
+
 
   // =========================================================
   // HELPERS
@@ -155,21 +249,22 @@ function ViewApplicants() {
   const getRecommendationClass = (recommendation) => {
     switch (recommendation) {
       case "STRONG_MATCH":
-        return "recommendation strong";
+        return "applicant-recommendation strong";
 
       case "GOOD_MATCH":
-        return "recommendation good";
+        return "applicant-recommendation good";
 
       case "PARTIAL_MATCH":
-        return "recommendation partial";
+        return "applicant-recommendation partial";
 
       case "LOW_MATCH":
-        return "recommendation low";
+        return "applicant-recommendation low";
 
       default:
-        return "recommendation";
+        return "applicant-recommendation";
     }
   };
+
 
   const getRecommendationLabel = (recommendation) => {
     switch (recommendation) {
@@ -190,530 +285,934 @@ function ViewApplicants() {
     }
   };
 
+
   const getScoreClass = (score) => {
     const value = Number(score);
 
     if (value >= 80) {
-      return "score high";
+      return "applicant-score high";
     }
 
     if (value >= 60) {
-      return "score medium";
+      return "applicant-score medium";
     }
 
-    return "score low";
+    return "applicant-score low";
   };
 
+
+  const getInitial = (name) => {
+    if (!name) {
+      return "?";
+    }
+
+    return name
+      .charAt(0)
+      .toUpperCase();
+  };
+
+
   // =========================================================
-  // PAGE
+  // LOADING JOBS
   // =========================================================
 
-  return (
-    <div className="screening-page">
+  if (loadingJobs) {
+    return (
+      <div className="recruiter-screening-page recruiter-screening-state-page">
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+        <div className="recruiter-screening-state-card">
 
-      <div className="screening-header">
-        <div>
-          <h1>Applicant Screening</h1>
+          <span className="recruiter-screening-spinner"></span>
+
+          <h2>
+            Loading Your Jobs
+          </h2>
 
           <p>
-            Review applicants and rank them based on resume-job
-            compatibility.
+            Please wait while we load your job positions.
           </p>
+
         </div>
+
       </div>
+    );
+  }
 
-      {/* =====================================================
-          JOB SELECTOR
-      ===================================================== */}
 
-      <div className="screening-card job-selector-card">
+  // =========================================================
+  // INITIAL ERROR
+  // =========================================================
 
-        <div className="card-title">
-          <span className="title-icon">💼</span>
+  if (error && jobs.length === 0) {
+    return (
+      <div className="recruiter-screening-page recruiter-screening-state-page">
 
-          <div>
-            <h2>Select Job</h2>
-            <p>Choose a job to view its applicants and rankings.</p>
-          </div>
-        </div>
+        <div className="recruiter-screening-state-card recruiter-screening-error-card">
 
-        <select
-          className="job-select"
-          value={selectedJobId}
-          onChange={handleJobChange}
-        >
-          <option value="">
-            -- Select a job --
-          </option>
-
-          {jobs.map((job) => (
-            <option
-              key={job.jobId}
-              value={job.jobId}
-            >
-              {job.title}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* =====================================================
-          MESSAGES
-      ===================================================== */}
-
-      {message && (
-        <div className="screening-message success-message">
-          ✓ {message}
-        </div>
-      )}
-
-      {error && (
-        <div className="screening-message error-message">
-          ⚠ {error}
-        </div>
-      )}
-
-      {/* =====================================================
-          APPLICATIONS
-      ===================================================== */}
-
-      {selectedJobId && (
-        <>
-          <div className="screening-summary">
-
-            <div className="summary-card">
-              <span className="summary-label">
-                Applications
-              </span>
-
-              <strong>
-                {applications.length}
-              </strong>
-            </div>
-
-            <div className="summary-card">
-              <span className="summary-label">
-                Screened
-              </span>
-
-              <strong>
-                {screeningResults.length}
-              </strong>
-            </div>
-
-            <div className="summary-card">
-              <span className="summary-label">
-                Pending
-              </span>
-
-              <strong>
-                {Math.max(
-                  applications.length - screeningResults.length,
-                  0
-                )}
-              </strong>
-            </div>
-
+          <div className="recruiter-screening-error-icon">
+            !
           </div>
 
-          {/* =================================================
-              APPLICANT LIST
-              ================================================= */}
+          <h2>
+            Unable to Load Jobs
+          </h2>
 
-          <div className="screening-card">
+          <p>
+            {error}
+          </p>
 
-            <div className="section-header">
+        </div>
+
+      </div>
+    );
+  }
+
+
+  // =========================================================
+  // SELECTED JOB
+  // =========================================================
+
+  const selectedJob = jobs.find(
+    (job) =>
+      String(job.jobId) === String(selectedJobId)
+  );
+
+
+  return (
+    <div className="recruiter-screening-page">
+
+      <div className="recruiter-screening-container">
+
+        {/* =================================================
+            HEADER
+            ================================================= */}
+
+        <header className="recruiter-screening-header">
+
+          <div className="recruiter-screening-heading">
+
+            <span className="recruiter-screening-eyebrow">
+              RECRUITER WORKSPACE
+            </span>
+
+            <div className="recruiter-screening-title-row">
+
+              <div className="recruiter-screening-title-icon">
+                👥
+              </div>
+
               <div>
-                <h2>Applicants</h2>
+
+                <h1>
+                  Applicant Screening
+                </h1>
 
                 <p>
-                  Run screening to calculate each applicant's
-                  compatibility score.
+                  Review, screen, and rank candidates based
+                  on resume compatibility.
                 </p>
+
               </div>
+
             </div>
 
-            {loadingApplications && (
-              <div className="table-message">
-                Loading applicants...
+          </div>
+
+        </header>
+
+
+        {/* =================================================
+            JOB SELECTOR
+            ================================================= */}
+
+        <section className="recruiter-screening-job-selector">
+
+          <div className="recruiter-screening-selector-icon">
+            💼
+          </div>
+
+          <div className="recruiter-screening-selector-content">
+
+            <div>
+
+              <span className="recruiter-screening-section-label">
+                JOB POSITION
+              </span>
+
+              <h2>
+                {selectedJob
+                  ? selectedJob.title
+                  : "Select a Job"}
+              </h2>
+
+              <p>
+                {selectedJob
+                  ? `Viewing applicants for Job #${selectedJob.jobId}.`
+                  : "Choose a position to view its applicants and screening results."}
+              </p>
+
+            </div>
+
+            <div className="recruiter-screening-select-wrapper">
+
+              <select
+                value={selectedJobId}
+                onChange={handleJobChange}
+                className="recruiter-screening-select"
+              >
+
+                <option value="">
+                  Select a job position
+                </option>
+
+                {jobs.map((job) => (
+
+                  <option
+                    key={job.jobId}
+                    value={job.jobId}
+                  >
+                    {job.title}
+                  </option>
+
+                ))}
+
+              </select>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+        {/* =================================================
+            MESSAGES
+            ================================================= */}
+
+        {message && (
+          <div className="recruiter-screening-alert recruiter-screening-success">
+
+            <span>
+              ✓
+            </span>
+
+            <p>
+              {message}
+            </p>
+
+          </div>
+        )}
+
+        {error && (
+          <div className="recruiter-screening-alert recruiter-screening-error">
+
+            <span>
+              !
+            </span>
+
+            <p>
+              {error}
+            </p>
+
+          </div>
+        )}
+
+
+        {/* =================================================
+            SELECTED JOB CONTENT
+            ================================================= */}
+
+        {selectedJobId && (
+          <>
+
+            {/* =================================================
+                SUMMARY
+                ================================================= */}
+
+            <section className="recruiter-screening-summary">
+
+              <div className="recruiter-screening-summary-card">
+
+                <div className="recruiter-screening-summary-icon applications">
+                  👥
+                </div>
+
+                <div>
+
+                  <span>
+                    Applications
+                  </span>
+
+                  <strong>
+                    {applications.length}
+                  </strong>
+
+                </div>
+
               </div>
-            )}
 
-            {!loadingApplications &&
-              applications.length === 0 && (
-                <div className="empty-state">
-                  <div className="empty-icon">👥</div>
 
-                  <h3>No applicants yet</h3>
+              <div className="recruiter-screening-summary-card">
+
+                <div className="recruiter-screening-summary-icon screened">
+                  ✓
+                </div>
+
+                <div>
+
+                  <span>
+                    Screened
+                  </span>
+
+                  <strong>
+                    {screeningResults.length}
+                  </strong>
+
+                </div>
+
+              </div>
+
+
+              <div className="recruiter-screening-summary-card">
+
+                <div className="recruiter-screening-summary-icon pending">
+                  ⏳
+                </div>
+
+                <div>
+
+                  <span>
+                    Pending
+                  </span>
+
+                  <strong>
+                    {Math.max(
+                      applications.length -
+                        screeningResults.length,
+                      0
+                    )}
+                  </strong>
+
+                </div>
+
+              </div>
+
+            </section>
+
+
+            {/* =================================================
+                APPLICANTS
+                ================================================= */}
+
+            <section className="recruiter-screening-card">
+
+              <div className="recruiter-screening-card-header">
+
+                <div>
+
+                  <span className="recruiter-screening-section-label">
+                    CANDIDATE APPLICATIONS
+                  </span>
+
+                  <h2>
+                    Applicants
+                  </h2>
 
                   <p>
-                    No applicants have applied for this job yet.
+                    Review candidates and run AI-powered
+                    resume screening.
                   </p>
-                </div>
-              )}
-
-            {!loadingApplications &&
-              applications.length > 0 && (
-                <div className="applicant-list">
-
-                  {applications.map((application) => {
-
-                    const existingResult =
-                      screeningResults.find(
-                        (result) =>
-                          result.applicationId ===
-                          application.applicationId
-                      );
-
-                    return (
-                      <div
-                        className="applicant-card"
-                        key={application.applicationId}
-                      >
-
-                        <div className="applicant-info">
-
-                          <div className="applicant-avatar">
-                            👤
-                          </div>
-
-                          <div>
-                            <h3>
-                              Application #
-                              {application.applicationId}
-                            </h3>
-
-                            <p>
-                              Applicant ID:{" "}
-                              {application.applicantId}
-                            </p>
-                          </div>
-
-                        </div>
-
-                        <div className="application-details">
-
-                          <div>
-                            <span>Resume ID</span>
-                            <strong>
-                              {application.resumeId}
-                            </strong>
-                          </div>
-
-                          <div>
-                            <span>Status</span>
-                            <strong>
-                              {application.status}
-                            </strong>
-                          </div>
-
-                          <div>
-                            <span>Applied</span>
-                            <strong>
-                              {application.appliedAt
-                                ? new Date(
-                                    application.appliedAt
-                                  ).toLocaleDateString()
-                                : "N/A"}
-                            </strong>
-                          </div>
-
-                        </div>
-
-                        <div className="applicant-action">
-
-                          {existingResult && (
-                            <span className="screened-label">
-                              ✓ Screened
-                            </span>
-                          )}
-
-                          <button
-                            className="screen-button"
-                            onClick={() =>
-                              handleScreening(
-                                application.applicationId
-                              )
-                            }
-                            disabled={
-                              screeningApplicationId ===
-                              application.applicationId
-                            }
-                          >
-                            {screeningApplicationId ===
-                            application.applicationId
-                              ? "Screening..."
-                              : existingResult
-                              ? "Run Again"
-                              : "Run Screening"}
-                          </button>
-
-                        </div>
-
-                      </div>
-                    );
-                  })}
 
                 </div>
-              )}
 
-          </div>
+                {applications.length > 0 && (
+                  <span className="recruiter-screening-count">
 
-          {/* =================================================
-              SCREENING RESULTS
-              ================================================= */}
+                    {applications.length} applicant
+                    {applications.length !== 1
+                      ? "s"
+                      : ""}
 
-          <div className="screening-card ranking-card">
+                  </span>
+                )}
 
-            <div className="section-header">
-
-              <div>
-                <h2>Screening Results & Ranking</h2>
-
-                <p>
-                  Applicants ranked by their overall resume-job
-                  compatibility.
-                </p>
               </div>
 
-              {screeningResults.length > 0 && (
-                <div className="ranking-count">
-                  {screeningResults.length} screened
+
+              {loadingApplications && (
+                <div className="recruiter-screening-loading-inline">
+
+                  <span className="recruiter-screening-spinner small"></span>
+
+                  <span>
+                    Loading applicants...
+                  </span>
+
                 </div>
               )}
 
-            </div>
 
-            {loadingResults && (
-              <div className="table-message">
-                Loading screening results...
-              </div>
-            )}
+              {!loadingApplications &&
+                applications.length === 0 && (
 
-            {!loadingResults &&
-              screeningResults.length === 0 && (
-                <div className="empty-state">
+                  <div className="recruiter-screening-empty">
 
-                  <div className="empty-icon">
-                    📊
+                    <div className="recruiter-screening-empty-icon">
+                      👥
+                    </div>
+
+                    <h3>
+                      No Applicants Yet
+                    </h3>
+
+                    <p>
+                      Applications for this position
+                      will appear here.
+                    </p>
+
                   </div>
 
-                  <h3>No screening results yet</h3>
+                )}
+
+
+              {!loadingApplications &&
+                applications.length > 0 && (
+
+                  <div className="recruiter-applicant-list">
+
+                    {applications.map((application) => {
+
+                      const existingResult =
+                        screeningResults.find(
+                          (result) =>
+                            result.applicationId ===
+                            application.applicationId
+                        );
+
+                      return (
+                        <article
+                          key={application.applicationId}
+                          className="recruiter-applicant-card"
+                        >
+
+                          {/* =================================
+                              APPLICANT
+                              ================================= */}
+
+                          <div className="recruiter-applicant-main">
+
+                            <div className="recruiter-applicant-avatar">
+                              👤
+                            </div>
+
+                            <div className="recruiter-applicant-identity">
+
+                              <span>
+                                APPLICATION #
+                                {application.applicationId}
+                              </span>
+
+                              <h3>
+                                Applicant{" "}
+                                {application.applicantId}
+                              </h3>
+
+                              <p>
+                                Applicant ID:{" "}
+                                <strong>
+                                  {application.applicantId}
+                                </strong>
+                              </p>
+
+                            </div>
+
+                          </div>
+
+
+                          {/* =================================
+                              DETAILS
+                              ================================= */}
+
+                          <div className="recruiter-applicant-details">
+
+                            <div>
+
+                              <span>
+                                RESUME
+                              </span>
+
+                              <strong>
+                                #{application.resumeId}
+                              </strong>
+
+                            </div>
+
+                            <div>
+
+                              <span>
+                                STATUS
+                              </span>
+
+                              <strong className="recruiter-applicant-status">
+                                {application.status}
+                              </strong>
+
+                            </div>
+
+                            <div>
+
+                              <span>
+                                APPLIED
+                              </span>
+
+                              <strong>
+                                {application.appliedAt
+                                  ? new Date(
+                                      application.appliedAt
+                                    ).toLocaleDateString()
+                                  : "N/A"}
+                              </strong>
+
+                            </div>
+
+                          </div>
+
+
+                          {/* =================================
+                              ACTIONS
+                              ================================= */}
+
+                          <div className="recruiter-applicant-actions">
+
+                            {application.resumeId && (
+                              <button
+                                type="button"
+                                className="recruiter-screening-outline-button"
+                                onClick={() =>
+                                  handleViewResume(
+                                    application.resumeId
+                                  )
+                                }
+                              >
+                                📄 View Resume
+                              </button>
+                            )}
+
+                            {existingResult && (
+                              <span className="recruiter-screened-badge">
+                                ✓ Screened
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              className="recruiter-screen-button"
+                              onClick={() =>
+                                handleScreening(
+                                  application.applicationId
+                                )
+                              }
+                              disabled={
+                                screeningApplicationId ===
+                                application.applicationId
+                              }
+                            >
+
+                              {screeningApplicationId ===
+                              application.applicationId
+                                ? (
+                                  <>
+                                    <span className="button-spinner"></span>
+                                    Screening...
+                                  </>
+                                )
+                                : existingResult
+                                ? "Run Again"
+                                : "Run Screening"}
+
+                            </button>
+
+                          </div>
+
+                        </article>
+                      );
+                    })}
+
+                  </div>
+
+                )}
+
+            </section>
+
+
+            {/* =================================================
+                SCREENING RESULTS
+                ================================================= */}
+
+            <section className="recruiter-screening-card recruiter-ranking-card">
+
+              <div className="recruiter-screening-card-header">
+
+                <div>
+
+                  <span className="recruiter-screening-section-label">
+                    AI SCREENING
+                  </span>
+
+                  <h2>
+                    Screening Results & Ranking
+                  </h2>
 
                   <p>
-                    Click "Run Screening" above to evaluate
-                    applicants.
+                    Candidates ranked according to their
+                    overall resume-job compatibility.
                   </p>
 
                 </div>
-              )}
 
-            {!loadingResults &&
-              screeningResults.length > 0 && (
+                {screeningResults.length > 0 && (
+                  <span className="recruiter-ranking-count">
+                    {screeningResults.length} screened
+                  </span>
+                )}
 
-                <div className="ranking-table-wrapper">
+              </div>
 
-                  <table className="ranking-table">
 
-                    <thead>
-                      <tr>
-                        <th>Rank</th>
-                        <th>Applicant</th>
-                        <th>Email</th>
-                        <th>Resume</th>
-                        <th>Similarity</th>
-                        <th>Skills</th>
-                        <th>Experience</th>
-                        <th>Education</th>
-                        <th>Final Score</th>
-                        <th>Recommendation</th>
-                      </tr>
-                    </thead>
+              {loadingResults && (
+                <div className="recruiter-screening-loading-inline">
 
-                    <tbody>
+                  <span className="recruiter-screening-spinner small"></span>
 
-                      {screeningResults.map(
-                        (result, index) => (
-                          <tr
-                            key={result.resultId}
-                          >
-
-                            {/* Rank */}
-
-                            <td>
-                              <div className="rank-number">
-                                #{index + 1}
-                              </div>
-                            </td>
-
-                            {/* Applicant */}
-
-                            <td>
-                              <div className="table-applicant">
-
-                                <div className="table-avatar">
-                                  {result.applicantName
-                                    ? result.applicantName
-                                        .charAt(0)
-                                        .toUpperCase()
-                                    : "?"}
-                                </div>
-
-                                <div>
-                                  <strong>
-                                    {result.applicantName ||
-                                      "N/A"}
-                                  </strong>
-
-                                  <small>
-                                    ID:{" "}
-                                    {result.applicantId ||
-                                      "N/A"}
-                                  </small>
-                                </div>
-
-                              </div>
-                            </td>
-
-                            {/* Email */}
-
-                            <td>
-                              <span className="email-text">
-                                {result.applicantEmail ||
-                                  "N/A"}
-                              </span>
-                            </td>
-
-                            {/* Resume */}
-
-                            <td>
-                              <div className="resume-cell">
-
-                                <span className="resume-icon">
-                                  📄
-                                </span>
-
-                                <div>
-                                  <strong>
-                                    {result.resumeFileName ||
-                                      "N/A"}
-                                  </strong>
-
-                                  <small>
-                                    Resume ID:{" "}
-                                    {result.resumeId ||
-                                      "N/A"}
-                                  </small>
-                                </div>
-
-                              </div>
-                            </td>
-
-                            {/* Similarity */}
-
-                            <td>
-                              <span
-                                className={getScoreClass(
-                                  result.similarityScore
-                                )}
-                              >
-                                {Number(
-                                  result.similarityScore
-                                ).toFixed(2)}
-                                %
-                              </span>
-                            </td>
-
-                            {/* Skills */}
-
-                            <td>
-                              <span
-                                className={getScoreClass(
-                                  result.skillsScore
-                                )}
-                              >
-                                {Number(
-                                  result.skillsScore
-                                ).toFixed(2)}
-                                %
-                              </span>
-                            </td>
-
-                            {/* Experience */}
-
-                            <td>
-                              <span
-                                className={getScoreClass(
-                                  result.experienceScore
-                                )}
-                              >
-                                {Number(
-                                  result.experienceScore
-                                ).toFixed(2)}
-                                %
-                              </span>
-                            </td>
-
-                            {/* Education */}
-
-                            <td>
-                              <span
-                                className={getScoreClass(
-                                  result.educationScore
-                                )}
-                              >
-                                {Number(
-                                  result.educationScore
-                                ).toFixed(2)}
-                                %
-                              </span>
-                            </td>
-
-                            {/* Final Score */}
-
-                            <td>
-                              <div className="final-score">
-                                {Number(
-                                  result.finalScore
-                                ).toFixed(2)}
-                                <span>%</span>
-                              </div>
-                            </td>
-
-                            {/* Recommendation */}
-
-                            <td>
-                              <span
-                                className={getRecommendationClass(
-                                  result.recommendation
-                                )}
-                              >
-                                {getRecommendationLabel(
-                                  result.recommendation
-                                )}
-                              </span>
-                            </td>
-
-                          </tr>
-                        )
-                      )}
-
-                    </tbody>
-
-                  </table>
+                  <span>
+                    Loading screening results...
+                  </span>
 
                 </div>
-
               )}
 
-          </div>
 
-        </>
-      )}
+              {!loadingResults &&
+                screeningResults.length === 0 && (
+
+                  <div className="recruiter-screening-empty">
+
+                    <div className="recruiter-screening-empty-icon">
+                      📊
+                    </div>
+
+                    <h3>
+                      No Screening Results Yet
+                    </h3>
+
+                    <p>
+                      Run screening for an applicant to
+                      generate the ranking.
+                    </p>
+
+                  </div>
+
+                )}
+
+
+              {!loadingResults &&
+                screeningResults.length > 0 && (
+
+                  <div className="recruiter-ranking-wrapper">
+
+                    <table className="recruiter-ranking-table">
+
+                      <thead>
+
+                        <tr>
+
+                          <th>
+                            Rank
+                          </th>
+
+                          <th>
+                            Applicant
+                          </th>
+
+                          <th>
+                            Email
+                          </th>
+
+                          <th>
+                            Resume
+                          </th>
+
+                          <th>
+                            Similarity
+                          </th>
+
+                          <th>
+                            Skills
+                          </th>
+
+                          <th>
+                            Experience
+                          </th>
+
+                          <th>
+                            Education
+                          </th>
+
+                          <th>
+                            Final Score
+                          </th>
+
+                          <th>
+                            Recommendation
+                          </th>
+
+                        </tr>
+
+                      </thead>
+
+
+                      <tbody>
+
+                        {screeningResults.map(
+                          (result, index) => (
+
+                            <tr
+                              key={result.resultId}
+                            >
+
+                              {/* RANK */}
+
+                              <td>
+
+                                <div
+                                  className={
+                                    index === 0
+                                      ? "recruiter-rank top"
+                                      : "recruiter-rank"
+                                  }
+                                >
+                                  {index === 0
+                                    ? "🥇"
+                                    : `#${index + 1}`}
+                                </div>
+
+                              </td>
+
+
+                              {/* APPLICANT */}
+
+                              <td>
+
+                                <div className="recruiter-ranking-applicant">
+
+                                  <div className="recruiter-ranking-avatar">
+                                    {getInitial(
+                                      result.applicantName
+                                    )}
+                                  </div>
+
+                                  <div>
+
+                                    <strong>
+                                      {result.applicantName ||
+                                        "N/A"}
+                                    </strong>
+
+                                    <small>
+                                      ID:{" "}
+                                      {result.applicantId ||
+                                        "N/A"}
+                                    </small>
+
+                                  </div>
+
+                                </div>
+
+                              </td>
+
+
+                              {/* EMAIL */}
+
+                              <td>
+
+                                <span className="recruiter-ranking-email">
+                                  {result.applicantEmail ||
+                                    "N/A"}
+                                </span>
+
+                              </td>
+
+
+                              {/* RESUME */}
+
+                              <td>
+
+                                <div className="recruiter-ranking-resume">
+
+                                  <div className="recruiter-ranking-resume-icon">
+                                    📄
+                                  </div>
+
+                                  <div>
+
+                                    <strong>
+                                      {result.resumeFileName ||
+                                        "N/A"}
+                                    </strong>
+
+                                    <small>
+                                      Resume ID:{" "}
+                                      {result.resumeId ||
+                                        "N/A"}
+                                    </small>
+
+                                    {result.resumeId && (
+                                      <button
+                                        type="button"
+                                        className="recruiter-ranking-resume-button"
+                                        onClick={() =>
+                                          handleViewResume(
+                                            result.resumeId
+                                          )
+                                        }
+                                      >
+                                        View Resume
+                                      </button>
+                                    )}
+
+                                  </div>
+
+                                </div>
+
+                              </td>
+
+
+                              {/* SIMILARITY */}
+
+                              <td>
+
+                                <span
+                                  className={getScoreClass(
+                                    result.similarityScore
+                                  )}
+                                >
+                                  {Number(
+                                    result.similarityScore
+                                  ).toFixed(2)}
+                                  %
+                                </span>
+
+                              </td>
+
+
+                              {/* SKILLS */}
+
+                              <td>
+
+                                <span
+                                  className={getScoreClass(
+                                    result.skillsScore
+                                  )}
+                                >
+                                  {Number(
+                                    result.skillsScore
+                                  ).toFixed(2)}
+                                  %
+                                </span>
+
+                              </td>
+
+
+                              {/* EXPERIENCE */}
+
+                              <td>
+
+                                <span
+                                  className={getScoreClass(
+                                    result.experienceScore
+                                  )}
+                                >
+                                  {Number(
+                                    result.experienceScore
+                                  ).toFixed(2)}
+                                  %
+                                </span>
+
+                              </td>
+
+
+                              {/* EDUCATION */}
+
+                              <td>
+
+                                <span
+                                  className={getScoreClass(
+                                    result.educationScore
+                                  )}
+                                >
+                                  {Number(
+                                    result.educationScore
+                                  ).toFixed(2)}
+                                  %
+                                </span>
+
+                              </td>
+
+
+                              {/* FINAL SCORE */}
+
+                              <td>
+
+                                <div className="recruiter-final-score">
+
+                                  {Number(
+                                    result.finalScore
+                                  ).toFixed(2)}
+
+                                  <span>
+                                    %
+                                  </span>
+
+                                </div>
+
+                              </td>
+
+
+                              {/* RECOMMENDATION */}
+
+                              <td>
+
+                                <span
+                                  className={getRecommendationClass(
+                                    result.recommendation
+                                  )}
+                                >
+                                  {getRecommendationLabel(
+                                    result.recommendation
+                                  )}
+                                </span>
+
+                              </td>
+
+                            </tr>
+
+                          )
+                        )}
+
+                      </tbody>
+
+                    </table>
+
+                  </div>
+
+                )}
+
+            </section>
+
+          </>
+        )}
+
+      </div>
 
     </div>
   );
