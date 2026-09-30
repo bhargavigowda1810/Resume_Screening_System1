@@ -165,6 +165,13 @@
             <scope>test</scope>
         </dependency>
 
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
+        </dependency>
+
+
     </dependencies>
 
     <!-- =========================================================
@@ -251,6 +258,13 @@
                 </executions>
 
             </plugin>
+            <!-- Liquibase Maven Plugin -->
+            <plugin>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-maven-plugin</artifactId>
+                <version>4.31.1</version>
+            </plugin>
+
 
         </plugins>
 
