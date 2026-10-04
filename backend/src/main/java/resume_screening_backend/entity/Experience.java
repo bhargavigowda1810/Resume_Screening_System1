@@ -27,6 +27,13 @@ public class Experience {
     @Column(name = "end_date")
     private LocalDate endDate;
 
+    @Column(name = "original_start_date")
+    private LocalDate originalStartDate;
+
+    @Column(name = "original_end_date")
+    private LocalDate originalEndDate;
+
+
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
@@ -80,7 +87,21 @@ public class Experience {
     public void setEndDate(LocalDate endDate) {
         this.endDate = endDate;
     }
+    public LocalDate getOriginalStartDate() {
+    return originalStartDate;
+   }
 
+   public void setOriginalStartDate(LocalDate originalStartDate) {
+    this.originalStartDate = originalStartDate;
+   }
+
+   public LocalDate getOriginalEndDate() {
+    return originalEndDate;
+   }
+
+   public void setOriginalEndDate(LocalDate originalEndDate) {
+    this.originalEndDate = originalEndDate;
+  }
     public String getDescription() {
         return description;
     }
