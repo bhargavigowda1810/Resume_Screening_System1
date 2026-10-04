@@ -42,4 +42,30 @@ public class EmailService {
 
         mailSender.send(message);
     }
+    public void sendRegistrationOtp(
+        String recipientEmail,
+        String otp) {
+
+    SimpleMailMessage message =
+            new SimpleMailMessage();
+
+    message.setTo(recipientEmail);
+
+    message.setSubject(
+            "Resume Screening System - Email Verification OTP"
+    );
+
+    message.setText(
+            "Hello,\n\n" +
+            "Your email verification OTP for the Resume Screening System is:\n\n" +
+            otp +
+            "\n\n" +
+            "This OTP will expire in 5 minutes.\n\n" +
+            "If you did not request this OTP, you can safely ignore this email.\n\n" +
+            "Regards,\n" +
+            "Resume Screening System"
+    );
+
+    mailSender.send(message);
+}
 }
