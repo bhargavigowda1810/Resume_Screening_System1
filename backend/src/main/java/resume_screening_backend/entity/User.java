@@ -2,6 +2,7 @@ package resume_screening_backend.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "users")
@@ -18,8 +19,12 @@ public class User {
     @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
+    @JsonIgnore
     @Column(name = "password_hash", nullable = false, columnDefinition = "text")
     private String passwordHash;
+    
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
 
     @Column(name = "role", nullable = false, length = 20)
     private String role;
@@ -84,4 +89,12 @@ public class User {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+   public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+}
 }
