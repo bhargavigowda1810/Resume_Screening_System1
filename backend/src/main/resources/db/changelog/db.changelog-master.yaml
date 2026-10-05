@@ -1,4 +1,3 @@
-
 databaseChangeLog:
   - changeSet:
       id: 001-initial-schema
@@ -6,6 +5,16 @@ databaseChangeLog:
       changes:
         - sqlFile:
             path: changes/001-initial-schema.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: false
+
+  - changeSet:
+      id: 002-resume-profiles-and-email-verification
+      author: resume-team
+      changes:
+        - sqlFile:
+            path: changes/002-resume-profiles-and-email-verification.sql
             relativeToChangelogFile: true
             splitStatements: true
             stripComments: false
