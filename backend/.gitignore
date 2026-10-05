@@ -31,3 +31,14 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local/generated files
+__pycache__/
+*.pyc
+startup-error.txt
+uploads/
+existing_schema_check.sql
+resume_schema.sql
+resume_screening_backend_backup.dump
+../ai-service/**/__pycache__/
+../ai-service/**/*.pyc
