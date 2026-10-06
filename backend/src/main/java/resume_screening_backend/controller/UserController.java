@@ -6,6 +6,8 @@ import resume_screening_backend.dto.LoginResponse;
 import resume_screening_backend.dto.RegisterRequest;
 import resume_screening_backend.service.UserService;
 import resume_screening_backend.service.ApplicantProfileService;
+import resume_screening_backend.entity.RecruiterProfile;
+import resume_screening_backend.repository.RecruiterProfileRepository;
 import resume_screening_backend.dto.CreateRecruiterRequest;
 
 import org.springframework.http.HttpStatus;
@@ -23,14 +25,18 @@ import java.util.Optional;
 public class UserController {
 
     private final UserService userService;
-    private final ApplicantProfileService applicantProfileService;
+private final ApplicantProfileService applicantProfileService;
+private final RecruiterProfileRepository recruiterProfileRepository;
 
     public UserController(
         UserService userService,
-        ApplicantProfileService applicantProfileService) {
+        ApplicantProfileService applicantProfileService,
+        RecruiterProfileRepository recruiterProfileRepository) {
+
     this.userService = userService;
     this.applicantProfileService = applicantProfileService;
-    }
+    this.recruiterProfileRepository = recruiterProfileRepository;
+}
 
     // =========================================================
     // REGISTER
@@ -411,19 +417,87 @@ public ResponseEntity<String> verifyPasswordResetOtp(
         );
     }
 @GetMapping("/profile")
-public ResponseEntity<?> getApplicantProfile(
+public ResponseEntity<?> getProfile(
         Authentication authentication) {
 
     if (authentication == null || !authentication.isAuthenticated()) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "User is not authenticated."));
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User is not authenticated."
+                ));
     }
 
     String email = authentication.getName();
 
-    return applicantProfileService.getApplicantProfile(email)
+    Optional<User> optionalUser =
+            userService.findByEmail(email);
+
+    if (optionalUser.isEmpty()) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                        "message",
+                        "User not found."
+                ));
+    }
+
+    User user = optionalUser.get();
+
+    // =====================================================
+    // RECRUITER PROFILE
+    // =====================================================
+
+    if ("RECRUITER".equals(user.getRole())) {
+
+        Optional<RecruiterProfile> optionalProfile =
+                recruiterProfileRepository
+                        .findByUserEmail(email);
+
+        if (optionalProfile.isEmpty()) {
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "message",
+                            "Recruiter profile not found."
+                    ));
+        }
+
+        RecruiterProfile profile =
+                optionalProfile.get();
+
+        Map<String, Object> response =
+                new java.util.LinkedHashMap<>();
+
+        response.put("userId", user.getUserId());
+        response.put("name", user.getName());
+        response.put("email", user.getEmail());
+        response.put("role", user.getRole());
+
+        response.put("phone", profile.getPhone());
+        response.put("designation", profile.getDesignation());
+        response.put("companyName", profile.getCompanyName());
+        response.put("companyEmail", profile.getCompanyEmail());
+        response.put("companyPhone", profile.getCompanyPhone());
+        response.put("companyWebsite", profile.getCompanyWebsite());
+        response.put("industry", profile.getIndustry());
+        response.put("companySize", profile.getCompanySize());
+        response.put("companyAddress", profile.getCompanyAddress());
+
+        return ResponseEntity.ok(response);
+    }
+
+    // =====================================================
+    // APPLICANT PROFILE
+    // =====================================================
+
+    return applicantProfileService
+            .getApplicantProfile(email)
             .map(ResponseEntity::ok)
-            .orElseGet(() -> ResponseEntity.notFound().build());
+            .orElseGet(() ->
+                    ResponseEntity.notFound().build()
+            );
 }
 }
 
