@@ -499,5 +499,16 @@ public ResponseEntity<?> getProfile(
                     ResponseEntity.notFound().build()
             );
 }
+// =========================================================
+// LOGOUT
+// =========================================================
+
+@PostMapping("/logout")
+public ResponseEntity<String> logout() {
+
+    return ResponseEntity.ok(
+            "Logout successful."
+    );
+}
 }
 
