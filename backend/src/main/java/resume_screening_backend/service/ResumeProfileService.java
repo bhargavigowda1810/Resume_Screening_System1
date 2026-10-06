@@ -171,4 +171,33 @@ public class ResumeProfileService {
 
         resumeProfileRepository.deleteById(profileId);
     }
+public boolean isOwnedByUser(Long profileId, Long userId) {
+
+    Optional<ResumeProfile> profile =
+            resumeProfileRepository.findById(profileId);
+
+    if (profile.isEmpty()) {
+        return false;
+    }
+
+    Optional<Resume> resume =
+            resumeService.findById(profile.get().getResumeId());
+
+    if (resume.isEmpty()) {
+        return false;
+    }
+
+    return resume.get().getApplicantId().equals(userId);
+}
+public boolean isResumeOwnedByUser(Long resumeId, Long userId) {
+
+    Optional<Resume> resume =
+            resumeService.findById(resumeId);
+
+    if (resume.isEmpty()) {
+        return false;
+    }
+
+    return resume.get().getApplicantId().equals(userId);
+}
 }

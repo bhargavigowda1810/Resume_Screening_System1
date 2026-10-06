@@ -4,17 +4,24 @@ import resume_screening_backend.entity.ResumeSkill;
 import resume_screening_backend.entity.ResumeSkillId;
 import org.springframework.stereotype.Service;
 import resume_screening_backend.repository.ResumeSkillRepository;
-
+import resume_screening_backend.entity.Resume;
+import resume_screening_backend.repository.ResumeRepository;
+import java.util.Optional;
 import java.util.List;
 
 @Service
 public class ResumeSkillService {
 
-    private final ResumeSkillRepository resumeSkillRepository;
+   private final ResumeSkillRepository resumeSkillRepository;
+private final ResumeRepository resumeRepository;
 
-    public ResumeSkillService(ResumeSkillRepository resumeSkillRepository) {
-        this.resumeSkillRepository = resumeSkillRepository;
-    }
+public ResumeSkillService(
+        ResumeSkillRepository resumeSkillRepository,
+        ResumeRepository resumeRepository) {
+
+    this.resumeSkillRepository = resumeSkillRepository;
+    this.resumeRepository = resumeRepository;
+}
 
     public ResumeSkill addSkillToResume(Long resumeId, Long skillId) {
 
@@ -51,4 +58,15 @@ public class ResumeSkillService {
     public List<ResumeSkill> findAll() {
         return resumeSkillRepository.findAll();
     }
+public boolean isResumeOwnedByUser(Long resumeId, Long userId) {
+
+    Optional<Resume> resume =
+            resumeRepository.findById(resumeId);
+
+    if (resume.isEmpty()) {
+        return false;
+    }
+
+    return resume.get().getApplicantId().equals(userId);
+}
 }

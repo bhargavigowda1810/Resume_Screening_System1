@@ -5,7 +5,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import resume_screening_backend.service.EducationService;
-
+import org.springframework.security.core.Authentication;
+import resume_screening_backend.entity.User;
+import resume_screening_backend.service.UserService;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,15 +16,36 @@ import java.util.Optional;
 public class EducationController {
 
     private final EducationService educationService;
+private final UserService userService;
 
-    public EducationController(EducationService educationService) {
-        this.educationService = educationService;
-    }
+public EducationController(
+        EducationService educationService,
+        UserService userService) {
+
+    this.educationService = educationService;
+    this.userService = userService;
+}
 
     // Add education to a resume
-    @PostMapping
-    public ResponseEntity<Education> saveEducation(
-            @RequestBody Education education) {
+   @PostMapping
+public ResponseEntity<Education> saveEducation(
+        @RequestBody Education education,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!educationService.isResumeOwnedByUser(
+            education.getResumeId(), userId)) {
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Education savedEducation =
                 educationService.saveEducation(education);
@@ -33,9 +56,23 @@ public class EducationController {
     }
 
     // Get education by ID
-    @GetMapping("/{educationId}")
-    public ResponseEntity<Education> getEducationById(
-            @PathVariable Long educationId) {
+   @GetMapping("/{educationId}")
+public ResponseEntity<Education> getEducationById(
+        @PathVariable Long educationId,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!educationService.isOwnedByUser(educationId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Optional<Education> education =
                 educationService.findById(educationId);
@@ -57,20 +94,48 @@ public class EducationController {
     }
 
     // Get education records for a resume
-    @GetMapping("/resume/{resumeId}")
-    public ResponseEntity<List<Education>> getEducationByResume(
-            @PathVariable Long resumeId) {
+   @GetMapping("/resume/{resumeId}")
+public ResponseEntity<List<Education>> getEducationByResume(
+        @PathVariable Long resumeId,
+        Authentication authentication) {
 
-        return ResponseEntity.ok(
-                educationService.findByResumeId(resumeId)
-        );
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!educationService.isResumeOwnedByUser(resumeId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+
+    return ResponseEntity.ok(
+            educationService.findByResumeId(resumeId)
+    );
+}
 
     // Update education
     @PutMapping("/{educationId}")
-    public ResponseEntity<Education> updateEducation(
-            @PathVariable Long educationId,
-            @RequestBody Education education) {
+public ResponseEntity<Education> updateEducation(
+        @PathVariable Long educationId,
+        @RequestBody Education education,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!educationService.isOwnedByUser(educationId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Optional<Education> existingEducation =
                 educationService.findById(educationId);
@@ -88,8 +153,22 @@ public class EducationController {
 
     // Delete education
     @DeleteMapping("/{educationId}")
-    public ResponseEntity<Void> deleteEducation(
-            @PathVariable Long educationId) {
+public ResponseEntity<Void> deleteEducation(
+        @PathVariable Long educationId,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!educationService.isOwnedByUser(educationId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Optional<Education> existingEducation =
                 educationService.findById(educationId);

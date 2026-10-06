@@ -5,6 +5,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import resume_screening_backend.entity.User;
+import resume_screening_backend.service.UserService;
+
 import resume_screening_backend.entity.ResumeProfile;
 import resume_screening_backend.service.ResumeProfileService;
 
@@ -16,35 +19,97 @@ import java.util.Optional;
 public class ResumeProfileController {
 
     private final ResumeProfileService resumeProfileService;
+private final UserService userService;
 
-    public ResumeProfileController(
-            ResumeProfileService resumeProfileService) {
-        this.resumeProfileService = resumeProfileService;
-    }
+public ResumeProfileController(
+        ResumeProfileService resumeProfileService,
+        UserService userService) {
+
+    this.resumeProfileService = resumeProfileService;
+    this.userService = userService;
+}
 
     @GetMapping("/resume/{resumeId}")
-    public ResponseEntity<ResumeProfile> getProfileByResumeId(
-            @PathVariable Long resumeId) {
+public ResponseEntity<?> getProfileByResumeId(
+        @PathVariable Long resumeId,
+        Authentication authentication) {
 
-        Optional<ResumeProfile> profile =
-                resumeProfileService.findByResumeId(resumeId);
+    if (authentication == null ||
+            !authentication.isAuthenticated()) {
 
-        return profile
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User is not authenticated."
+                ));
     }
 
+    Optional<User> user =
+            userService.findByEmail(authentication.getName());
+
+    if (user.isEmpty()) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User was not found."
+                ));
+    }
+
+    Optional<ResumeProfile> profile =
+            resumeProfileService.findByResumeId(resumeId);
+
+    if (profile.isEmpty()) {
+        return ResponseEntity.notFound().build();
+    }
+
+    if (!resumeProfileService.isOwnedByUser(
+            profile.get().getProfileId(),
+            user.get().getUserId())) {
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    return ResponseEntity.ok(profile.get());
+}
     @PostMapping
-    public ResponseEntity<ResumeProfile> saveProfile(
-            @RequestBody ResumeProfile resumeProfile) {
+public ResponseEntity<?> saveProfile(
+        @RequestBody ResumeProfile resumeProfile,
+        Authentication authentication) {
 
-        ResumeProfile savedProfile =
-                resumeProfileService.saveResumeProfile(resumeProfile);
+    if (authentication == null ||
+            !authentication.isAuthenticated()) {
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(savedProfile);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User is not authenticated."
+                ));
     }
 
+    Optional<User> user =
+            userService.findByEmail(authentication.getName());
+
+    if (user.isEmpty()) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User was not found."
+                ));
+    }
+
+    if (!resumeProfileService.isResumeOwnedByUser(
+            resumeProfile.getResumeId(),
+            user.get().getUserId())) {
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    ResumeProfile savedProfile =
+            resumeProfileService.saveResumeProfile(resumeProfile);
+
+    return ResponseEntity.status(HttpStatus.CREATED)
+            .body(savedProfile);
+}
     @PutMapping("/{profileId}")
     public ResponseEntity<?> updateProfile(
             @PathVariable Long profileId,
@@ -142,24 +207,52 @@ public class ResumeProfileController {
     }
 
     @DeleteMapping("/{profileId}")
-    public ResponseEntity<?> deleteProfile(
-            @PathVariable Long profileId) {
+public ResponseEntity<?> deleteProfile(
+        @PathVariable Long profileId,
+        Authentication authentication) {
 
-        Optional<ResumeProfile> profile =
-                resumeProfileService.findById(profileId);
+    if (authentication == null ||
+            !authentication.isAuthenticated()) {
 
-        if (profile.isEmpty()) {
-
-            return ResponseEntity.notFound().build();
-        }
-
-        resumeProfileService.deleteResumeProfile(profileId);
-
-        return ResponseEntity.ok(
-                Map.of(
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
                         "message",
-                        "Resume profile deleted successfully."
-                )
-        );
+                        "User is not authenticated."
+                ));
     }
+
+    Optional<User> user =
+            userService.findByEmail(authentication.getName());
+
+    if (user.isEmpty()) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User was not found."
+                ));
+    }
+
+    Optional<ResumeProfile> profile =
+            resumeProfileService.findById(profileId);
+
+    if (profile.isEmpty()) {
+        return ResponseEntity.notFound().build();
+    }
+
+    if (!resumeProfileService.isOwnedByUser(
+            profileId,
+            user.get().getUserId())) {
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    resumeProfileService.deleteResumeProfile(profileId);
+
+    return ResponseEntity.ok(
+            Map.of(
+                    "message",
+                    "Resume profile deleted successfully."
+            )
+    );
+}
 }

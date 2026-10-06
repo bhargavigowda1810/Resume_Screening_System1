@@ -5,6 +5,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import resume_screening_backend.service.ExperienceService;
+import org.springframework.security.core.Authentication;
+import resume_screening_backend.entity.User;
+import resume_screening_backend.service.UserService;
+
 
 import java.util.List;
 import java.util.Optional;
@@ -14,15 +18,36 @@ import java.util.Optional;
 public class ExperienceController {
 
     private final ExperienceService experienceService;
+private final UserService userService;
 
-    public ExperienceController(ExperienceService experienceService) {
-        this.experienceService = experienceService;
-    }
+public ExperienceController(
+        ExperienceService experienceService,
+        UserService userService) {
+
+    this.experienceService = experienceService;
+    this.userService = userService;
+}
 
     // Add experience to a resume
     @PostMapping
-    public ResponseEntity<Experience> saveExperience(
-            @RequestBody Experience experience) {
+public ResponseEntity<Experience> saveExperience(
+        @RequestBody Experience experience,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!experienceService.isResumeOwnedByUser(
+            experience.getResumeId(), userId)) {
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Experience savedExperience =
                 experienceService.saveExperience(experience);
@@ -33,10 +58,23 @@ public class ExperienceController {
     }
 
     // Get experience by ID
-    @GetMapping("/{experienceId}")
-    public ResponseEntity<Experience> getExperienceById(
-            @PathVariable Long experienceId) {
+   @GetMapping("/{experienceId}")
+public ResponseEntity<Experience> getExperienceById(
+        @PathVariable Long experienceId,
+        Authentication authentication) {
 
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!experienceService.isOwnedByUser(experienceId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
         Optional<Experience> experience =
                 experienceService.findById(experienceId);
 
@@ -57,20 +95,48 @@ public class ExperienceController {
     }
 
     // Get experiences for a resume
-    @GetMapping("/resume/{resumeId}")
-    public ResponseEntity<List<Experience>> getExperiencesByResume(
-            @PathVariable Long resumeId) {
+  @GetMapping("/resume/{resumeId}")
+public ResponseEntity<List<Experience>> getExperiencesByResume(
+        @PathVariable Long resumeId,
+        Authentication authentication) {
 
-        return ResponseEntity.ok(
-                experienceService.findByResumeId(resumeId)
-        );
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!experienceService.isResumeOwnedByUser(resumeId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
+    return ResponseEntity.ok(
+            experienceService.findByResumeId(resumeId)
+    );
+}
+
     // Update experience
-    @PutMapping("/{experienceId}")
-    public ResponseEntity<Experience> updateExperience(
-            @PathVariable Long experienceId,
-            @RequestBody Experience experience) {
+   @PutMapping("/{experienceId}")
+public ResponseEntity<Experience> updateExperience(
+        @PathVariable Long experienceId,
+        @RequestBody Experience experience,
+        Authentication authentication) {
+
+   Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!experienceService.isOwnedByUser(experienceId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Optional<Experience> existingExperience =
                 experienceService.findById(experienceId);
@@ -88,8 +154,22 @@ public class ExperienceController {
 
     // Delete experience
     @DeleteMapping("/{experienceId}")
-    public ResponseEntity<Void> deleteExperience(
-            @PathVariable Long experienceId) {
+public ResponseEntity<Void> deleteExperience(
+        @PathVariable Long experienceId,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!experienceService.isOwnedByUser(experienceId, userId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Optional<Experience> existingExperience =
                 experienceService.findById(experienceId);

@@ -3,6 +3,10 @@ package resume_screening_backend.controller;
 import resume_screening_backend.entity.Resume;
 import resume_screening_backend.service.ResumeService;
 import resume_screening_backend.service.AiResumeService;
+import org.springframework.security.core.Authentication;
+
+import resume_screening_backend.entity.User;
+import resume_screening_backend.service.UserService;
 
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -24,23 +28,39 @@ import java.util.Optional;
 public class ResumeController {
 
     private final ResumeService resumeService;
-    private final AiResumeService aiResumeService;
+private final AiResumeService aiResumeService;
+private final UserService userService;
 
-    public ResumeController(
-            ResumeService resumeService,
-            AiResumeService aiResumeService) {
+public ResumeController(
+        ResumeService resumeService,
+        AiResumeService aiResumeService,
+        UserService userService) {
 
-        this.resumeService = resumeService;
-        this.aiResumeService = aiResumeService;
-    }
-
+    this.resumeService = resumeService;
+    this.aiResumeService = aiResumeService;
+    this.userService = userService;
+}
     // =========================================================
     // SAVE RESUME
     // =========================================================
 
-    @PostMapping
-    public ResponseEntity<Resume> saveResume(
-            @RequestBody Resume resume) {
+   @PostMapping
+public ResponseEntity<Resume> saveResume(
+        @RequestBody Resume resume,
+        Authentication authentication) {
+
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    if (!userId.equals(resume.getApplicantId())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         Resume savedResume =
                 resumeService.saveResume(resume);
@@ -54,36 +74,62 @@ public class ResumeController {
     // GET RESUME BY ID
     // =========================================================
 
-    @GetMapping("/{resumeId}")
-    public ResponseEntity<Resume> getResumeById(
-            @PathVariable Long resumeId) {
+   @GetMapping("/{resumeId}")
+public ResponseEntity<Resume> getResumeById(
+        @PathVariable Long resumeId,
+        Authentication authentication) {
 
-        Optional<Resume> resume =
-                resumeService.findById(resumeId);
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
 
-        return resume
-                .map(ResponseEntity::ok)
-                .orElseGet(() ->
-                        ResponseEntity
-                                .notFound()
-                                .build()
-                );
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+    Optional<Resume> resume =
+            resumeService.findById(resumeId);
+
+    if (resume.isEmpty()) {
+        return ResponseEntity.notFound().build();
+    }
+
+    if (!userId.equals(resume.get().getApplicantId())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+      return ResponseEntity.ok(resume.get());
+
     }
 
     // =========================================================
     // VIEW / DOWNLOAD ACTUAL RESUME FILE
     // =========================================================
 
-    @GetMapping("/{resumeId}/file")
-    public ResponseEntity<Resource> getResumeFile(
-            @PathVariable Long resumeId) {
+   @GetMapping("/{resumeId}/file")
+public ResponseEntity<Resource> getResumeFile(
+        @PathVariable Long resumeId,
+        Authentication authentication) {
 
         try {
 
             // Find resume record
             Optional<Resume> resume =
                     resumeService.findById(resumeId);
+Optional<User> user =
+        userService.findByEmail(authentication.getName());
 
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+if (resume.isPresent() &&
+        !userId.equals(resume.get().getApplicantId())) {
+
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+}
             if (resume.isEmpty()) {
                 return ResponseEntity
                         .notFound()
@@ -183,34 +229,58 @@ public class ResumeController {
     // =========================================================
 
     @GetMapping("/applicant/{applicantId}")
-    public ResponseEntity<List<Resume>>
-    getResumesByApplicant(
-            @PathVariable Long applicantId) {
+public ResponseEntity<List<Resume>>
+getResumesByApplicant(
+        @PathVariable Long applicantId,
+        Authentication authentication) {
 
-        return ResponseEntity.ok(
-                resumeService
-                        .findByApplicantId(applicantId)
-        );
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
+
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+    if (!userId.equals(applicantId)) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+
+    return ResponseEntity.ok(
+            resumeService
+                    .findByApplicantId(applicantId)
+    );
+}
 
     // =========================================================
     // UPDATE RESUME
     // =========================================================
 
     @PutMapping("/{resumeId}")
-    public ResponseEntity<Resume> updateResume(
-            @PathVariable Long resumeId,
-            @RequestBody Resume resume) {
+public ResponseEntity<Resume> updateResume(
+        @PathVariable Long resumeId,
+        @RequestBody Resume resume,
+        Authentication authentication) {
 
-        Optional<Resume> existingResume =
-                resumeService.findById(resumeId);
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
 
-        if (existingResume.isEmpty()) {
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
 
-            return ResponseEntity
-                    .notFound()
-                    .build();
-        }
+Long userId = user.get().getUserId();
+
+    Optional<Resume> existingResume =
+            resumeService.findById(resumeId);
+
+    if (existingResume.isEmpty()) {
+        return ResponseEntity.notFound().build();
+    }
+
+    if (!userId.equals(existingResume.get().getApplicantId())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         resume.setResumeId(resumeId);
 
@@ -223,19 +293,30 @@ public class ResumeController {
     // DELETE RESUME
     // =========================================================
 
-    @DeleteMapping("/{resumeId}")
-    public ResponseEntity<Void> deleteResume(
-            @PathVariable Long resumeId) {
+   @DeleteMapping("/{resumeId}")
+public ResponseEntity<Void> deleteResume(
+        @PathVariable Long resumeId,
+        Authentication authentication) {
 
-        Optional<Resume> existingResume =
-                resumeService.findById(resumeId);
+    Optional<User> user =
+        userService.findByEmail(authentication.getName());
 
-        if (existingResume.isEmpty()) {
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
 
-            return ResponseEntity
-                    .notFound()
-                    .build();
-        }
+Long userId = user.get().getUserId();
+
+    Optional<Resume> existingResume =
+            resumeService.findById(resumeId);
+
+    if (existingResume.isEmpty()) {
+        return ResponseEntity.notFound().build();
+    }
+
+    if (!userId.equals(existingResume.get().getApplicantId())) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
 
         resumeService.deleteResume(resumeId);
 
@@ -254,14 +335,27 @@ public class ResumeController {
                     MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public ResponseEntity<String> parseResume(
-            @RequestParam("file")
-            MultipartFile file,
+        @RequestParam("file")
+        MultipartFile file,
 
-            @RequestParam("applicantId")
-            Long applicantId) {
+        @RequestParam("applicantId")
+        Long applicantId,
+
+        Authentication authentication) {
 
         try {
+Optional<User> user =
+        userService.findByEmail(authentication.getName());
 
+if (user.isEmpty()) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+}
+
+Long userId = user.get().getUserId();
+
+if (!userId.equals(applicantId)) {
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+}
             // Validate file
             if (file.isEmpty()) {
 

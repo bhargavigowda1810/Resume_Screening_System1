@@ -1,5 +1,6 @@
 package resume_screening_backend.config;
-
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import resume_screening_backend.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,6 +20,12 @@ import java.util.List;
 
 @Configuration
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     // =========================================================
     // PASSWORD ENCODER
@@ -135,8 +142,15 @@ public class SecurityConfig {
 
                 // Users
                 .requestMatchers(
-                        "/api/users/**"
-                ).permitAll()
+        HttpMethod.POST,
+        "/api/users/register",
+        "/api/users/recruiters",
+        "/api/users/recruiters/verify-otp",
+        "/api/users/recruiters/resend-otp",
+        "/api/users/login",
+        "/api/users/forgot-password",
+        "/api/users/reset-password"
+).permitAll()
 
                 // Jobs
                 .requestMatchers(
@@ -212,7 +226,10 @@ public class SecurityConfig {
                 // Anything else
                 .anyRequest().authenticated()
             );
-
+        http.addFilterBefore(
+        jwtAuthenticationFilter,
+        UsernamePasswordAuthenticationFilter.class
+);
         return http.build();
     }
 }

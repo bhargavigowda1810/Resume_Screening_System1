@@ -9,7 +9,7 @@ import resume_screening_backend.entity.EmailOtp;
 import resume_screening_backend.entity.RecruiterProfile;
 import resume_screening_backend.repository.EmailOtpRepository;
 import resume_screening_backend.repository.RecruiterProfileRepository;
-
+import resume_screening_backend.security.JwtService;
 import java.security.SecureRandom;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,14 +30,15 @@ public class UserService {
     private final EmailService emailService;
     private final EmailOtpRepository emailOtpRepository;
     private final RecruiterProfileRepository recruiterProfileRepository;
-
+    private final JwtService jwtService;
     public UserService(
         UserRepository userRepository,
         PasswordEncoder passwordEncoder,
         PasswordResetTokenRepository passwordResetTokenRepository,
         EmailService emailService,
         EmailOtpRepository emailOtpRepository,
-        RecruiterProfileRepository recruiterProfileRepository) {
+       RecruiterProfileRepository recruiterProfileRepository,
+JwtService jwtService) {
 
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
@@ -45,6 +46,7 @@ public class UserService {
     this.emailService = emailService;
     this.emailOtpRepository = emailOtpRepository;
     this.recruiterProfileRepository = recruiterProfileRepository;
+    this.jwtService = jwtService;
 }
 private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -362,12 +364,15 @@ public void verifyRegistrationOtp(
     );
 }
 
-        return new LoginResponse(
-                user.getUserId(),
-                user.getName(),
-                user.getEmail(),
-                user.getRole()
-        );
+        String token = jwtService.generateToken(user);
+
+return new LoginResponse(
+        user.getUserId(),
+        user.getName(),
+        user.getEmail(),
+        user.getRole(),
+        token
+);
     }
 
     // =========================================================
