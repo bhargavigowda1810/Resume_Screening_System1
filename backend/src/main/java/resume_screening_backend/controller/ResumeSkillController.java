@@ -9,7 +9,7 @@ import org.springframework.security.core.Authentication;
 import resume_screening_backend.entity.User;
 import resume_screening_backend.service.UserService;
 import java.util.Optional;
-
+import java.util.Map;
 import java.util.List;
 
 @RestController
@@ -157,4 +157,53 @@ Long userId = user.get().getUserId();
                 resumeSkillService.findAll()
         );
     }
+    // Update all skills for a resume
+@PutMapping("/resume/{resumeId}")
+public ResponseEntity<?> updateSkillsForResume(
+        @PathVariable Long resumeId,
+        @RequestBody List<String> skillNames,
+        Authentication authentication) {
+
+    if (authentication == null ||
+            !authentication.isAuthenticated()) {
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "message",
+                        "User is not authenticated."
+                ));
+    }
+
+    try {
+        String email = authentication.getName();
+
+        List<String> updatedSkills =
+                resumeSkillService.updateSkillsForResume(
+                        resumeId,
+                        skillNames,
+                        email
+                );
+
+        return ResponseEntity.ok(updatedSkills);
+
+    } catch (IllegalArgumentException e) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of(
+                        "message",
+                        e.getMessage()
+                ));
+
+    } catch (Exception e) {
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of(
+                        "message",
+                        "Unable to update skills."
+                ));
+    }
+}
    }
