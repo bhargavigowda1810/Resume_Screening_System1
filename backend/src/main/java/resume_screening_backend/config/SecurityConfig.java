@@ -141,15 +141,27 @@ public class SecurityConfig {
                 ).permitAll()
 
                 // Users
-                .requestMatchers(
+                // Public user endpoints
+.requestMatchers(
         HttpMethod.POST,
         "/api/users/register",
-        "/api/users/recruiters",
-        "/api/users/recruiters/verify-otp",
-        "/api/users/recruiters/resend-otp",
         "/api/users/login",
         "/api/users/forgot-password",
+        "/api/users/forgot-password-otp",
+"/api/users/verify-password-reset-otp",
         "/api/users/reset-password"
+).permitAll()
+
+// Admin-only recruiter management
+.requestMatchers(
+        "/api/users/admin/**"
+).hasRole("ADMIN")
+
+// Existing recruiter OTP endpoints
+.requestMatchers(
+        HttpMethod.POST,
+        "/api/users/recruiters/verify-otp",
+        "/api/users/recruiters/resend-otp"
 ).permitAll()
 
                 // Jobs

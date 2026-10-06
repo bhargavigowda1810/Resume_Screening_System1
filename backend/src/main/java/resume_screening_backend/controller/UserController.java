@@ -86,6 +86,43 @@ public ResponseEntity<?> createRecruiter(
                 .body(e.getMessage());
     }
 }
+
+// =========================================================
+// ADMIN CREATE RECRUITER
+// =========================================================
+
+@PostMapping("/admin/recruiters")
+public ResponseEntity<?> createRecruiterByAdmin(
+        @RequestBody CreateRecruiterRequest request) {
+
+    try {
+
+        User recruiter = userService.createRecruiter(
+                request.getName(),
+                request.getEmail(),
+                request.getPassword(),
+                request.getPhone(),
+                request.getDesignation(),
+                request.getCompanyName(),
+                request.getCompanyEmail(),
+                request.getCompanyPhone(),
+                request.getCompanyWebsite(),
+                request.getIndustry(),
+                request.getCompanySize(),
+                request.getCompanyAddress()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(recruiter);
+
+    } catch (RuntimeException e) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(e.getMessage());
+    }
+}
 // =========================================================
 // VERIFY RECRUITER EMAIL OTP
 // =========================================================
@@ -206,7 +243,76 @@ public ResponseEntity<?> resendRecruiterVerificationOtp(
                     .body(e.getMessage());
         }
     }
+// =========================================================
+// PASSWORD RESET OTP
+// =========================================================
 
+@PostMapping("/forgot-password-otp")
+public ResponseEntity<String> forgotPasswordOtp(
+        @RequestBody Map<String, String> request) {
+
+    String email = request.get("email");
+
+    if (email == null || email.isBlank()) {
+        return ResponseEntity
+                .badRequest()
+                .body("Email is required.");
+    }
+
+    try {
+
+        userService.generatePasswordResetOtp(email);
+
+        return ResponseEntity.ok(
+                "If an account exists with this email, " +
+                "a password reset OTP has been sent to your email."
+        );
+
+    } catch (RuntimeException e) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(e.getMessage());
+    }
+}
+// =========================================================
+// VERIFY PASSWORD RESET OTP
+// =========================================================
+
+@PostMapping("/verify-password-reset-otp")
+public ResponseEntity<String> verifyPasswordResetOtp(
+        @RequestBody Map<String, String> request) {
+
+    String email = request.get("email");
+    String otp = request.get("otp");
+
+    if (email == null || email.isBlank()) {
+        return ResponseEntity
+                .badRequest()
+                .body("Email is required.");
+    }
+
+    if (otp == null || otp.isBlank()) {
+        return ResponseEntity
+                .badRequest()
+                .body("OTP is required.");
+    }
+
+    try {
+
+    String token = userService.verifyPasswordResetOtp(
+            email,
+            otp
+    );
+        return ResponseEntity.ok(token);
+
+    } catch (RuntimeException e) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(e.getMessage());
+    }
+}
     // =========================================================
     // RESET PASSWORD
     // =========================================================

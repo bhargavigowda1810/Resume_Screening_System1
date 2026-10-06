@@ -492,7 +492,142 @@ return new LoginResponse(
                 resetToken
         );
     }
+// =========================================================
+// GENERATE PASSWORD RESET OTP
+// =========================================================
+@Transactional
+public void generatePasswordResetOtp(String email) {
 
+    Optional<User> optionalUser =
+            userRepository.findByEmail(email);
+
+    /*
+     * Do not reveal whether the email exists.
+     */
+    if (optionalUser.isEmpty()) {
+        return;
+    }
+
+    // Delete any previous OTP for this email.
+    emailOtpRepository.deleteByEmail(email);
+
+    // Generate a secure six-digit OTP.
+    String otp = generateSixDigitOtp();
+
+    // OTP expires after 5 minutes.
+    LocalDateTime expiryDate =
+            LocalDateTime.now().plusMinutes(5);
+
+    EmailOtp emailOtp =
+            new EmailOtp(
+                    email,
+                    otp,
+                    expiryDate
+            );
+
+    emailOtpRepository.save(emailOtp);
+
+    // Send OTP to the user's email.
+    emailService.sendPasswordResetOtp(
+            email,
+            otp
+    );
+}
+// =========================================================
+// VERIFY PASSWORD RESET OTP
+// =========================================================
+@Transactional
+public String verifyPasswordResetOtp(
+        String email,
+        String otp) {
+
+    Optional<User> optionalUser =
+            userRepository.findByEmail(email);
+
+    /*
+     * Do not reveal whether the email exists.
+     */
+    if (optionalUser.isEmpty()) {
+        throw new RuntimeException(
+                "Invalid or expired OTP."
+        );
+    }
+
+    EmailOtp emailOtp =
+            emailOtpRepository
+                    .findByEmail(email)
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Invalid or expired OTP."
+                            )
+                    );
+
+    /*
+     * Check OTP expiry.
+     */
+    if (emailOtp.getExpiryDate()
+            .isBefore(LocalDateTime.now())) {
+
+        emailOtpRepository.delete(emailOtp);
+
+        throw new RuntimeException(
+                "OTP has expired. Please request a new OTP."
+        );
+    }
+
+    /*
+     * Check whether the entered OTP matches.
+     */
+    if (!emailOtp.getOtp().equals(otp)) {
+
+        throw new RuntimeException(
+                "Invalid OTP."
+        );
+    }
+
+    /*
+     * OTP is valid.
+     * Delete it so it cannot be reused.
+     */
+    emailOtpRepository.delete(emailOtp);
+
+    User user = optionalUser.get();
+
+    /*
+     * Delete any previous password reset token.
+     */
+    passwordResetTokenRepository.deleteByUser(user);
+
+    /*
+     * Generate a new password reset token.
+     */
+    String token =
+            UUID.randomUUID().toString();
+
+    /*
+     * Token expires after 5 minutes.
+     */
+    LocalDateTime expiryDate =
+            LocalDateTime.now().plusMinutes(5);
+
+    PasswordResetToken resetToken =
+            new PasswordResetToken(
+                    token,
+                    user,
+                    expiryDate
+            );
+
+    passwordResetTokenRepository.save(
+            resetToken
+    );
+
+    /*
+     * Return the token to the controller.
+     *
+     * ResetPassword.jsx already uses this token.
+     */
+    return token;
+}
     // =========================================================
     // FIND USER BY EMAIL
     // =========================================================
