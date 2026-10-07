@@ -2,46 +2,261 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../services/api";
 
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+const OTP_REGEX = /^\d{6}$/;
+
+/* =========================================================
+   SMALL REUSABLE COMPONENT
+   Shows an error or success message
+   ========================================================= */
+
+function StatusMessage({ type, children }) {
+  const isError = type === "error";
+
+  return (
+    <div
+      className={
+        isError
+          ? "register-alert register-alert-error"
+          : "register-alert register-alert-success"
+      }
+      role={isError ? "alert" : "status"}
+    >
+      <span className="register-alert-icon">{isError ? "!" : "✓"}</span>
+
+      <span>{children}</span>
+    </div>
+  );
+}
+
+/* =========================================================
+   REGISTER PAGE
+   ========================================================= */
+
 function Register() {
   const navigate = useNavigate();
 
+  /* ---------- Form fields ---------- */
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("APPLICANT");
-
-  // Show / Hide password
   const [showPassword, setShowPassword] = useState(false);
 
+  /* ---------- Email verification (OTP) ---------- */
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+
+  // Messages that belong to the verification section
+  // (shown right below the email / OTP fields)
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccess, setOtpSuccess] = useState("");
+
+  /* ---------- Account creation ---------- */
+  // Messages that belong to the "Create Account" button
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /* =========================================================
+     HELPERS
+     ========================================================= */
+
+  const clearOtpMessages = () => {
+    setOtpError("");
+    setOtpSuccess("");
+  };
+
+  const clearFormMessages = () => {
+    setError("");
+    setSuccess("");
+  };
+
+  /* =========================================================
+     EMAIL CHANGE
+     If the email changes after verification,
+     the verification must be done again.
+     ========================================================= */
+
+  const handleEmailChange = (event) => {
+    setEmail(event.target.value);
+
+    setEmailVerified(false);
+    setOtpSent(false);
+    setOtp("");
+
+    clearOtpMessages();
+    clearFormMessages();
+  };
+
+  /* =========================================================
+     SEND REGISTRATION OTP
+     ========================================================= */
+
+  const handleSendOtp = async () => {
+    clearOtpMessages();
+    clearFormMessages();
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setOtpError("Please enter your email address.");
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setOtpError("Please enter a valid email address.");
+      return;
+    }
+
+    setOtpLoading(true);
+
+    try {
+      await api.post("/users/send-registration-otp", {
+        email: trimmedEmail,
+      });
+
+      setOtpSent(true);
+      setEmailVerified(false);
+      setOtp("");
+
+      setOtpSuccess(
+        "OTP has been sent to your email address. Please check your inbox."
+      );
+    } catch (error) {
+      console.error("Failed to send registration OTP:", error);
+
+      setOtpError(
+        error.message || "Unable to send OTP. Please try again."
+      );
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  /* =========================================================
+     VERIFY REGISTRATION OTP
+     ========================================================= */
+
+  const handleVerifyOtp = async () => {
+    clearOtpMessages();
+    clearFormMessages();
+
+    const trimmedEmail = email.trim();
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setOtpError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!otp.trim()) {
+      setOtpError("Please enter the OTP.");
+      return;
+    }
+
+    if (!OTP_REGEX.test(otp.trim())) {
+      setOtpError("OTP must contain exactly 6 digits.");
+      return;
+    }
+
+    setVerifyLoading(true);
+
+    try {
+      await api.post("/users/verify-registration-otp", {
+        email: trimmedEmail,
+        otp: otp.trim(),
+      });
+
+      setEmailVerified(true);
+
+      setOtpSuccess(
+        "Email verified successfully. You can now create your account."
+      );
+    } catch (error) {
+      console.error("OTP verification failed:", error);
+
+      setEmailVerified(false);
+
+      setOtpError(
+        error.message || "Invalid or expired OTP. Please try again."
+      );
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  /* =========================================================
+     OTP INPUT CHANGE (digits only, max 6)
+     ========================================================= */
+
+  const handleOtpChange = (event) => {
+    const value = event.target.value.replace(/\D/g, "").slice(0, 6);
+
+    setOtp(value);
+    setOtpError("");
+  };
+
+  /* =========================================================
+     REGISTER
+     ========================================================= */
+
   const handleRegister = async (event) => {
     event.preventDefault();
 
-    setError("");
-    setSuccess("");
+    clearFormMessages();
+
+    if (!name.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+
+    const trimmedEmail = email.trim();
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!emailVerified) {
+      setError(
+        "Please verify your email address before creating your account."
+      );
+      return;
+    }
+
+    if (!password.trim()) {
+      setError("Please enter a password.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await api.post("/users/register", {
-        name,
-        email,
+      await api.post("/users/register", {
+        name: name.trim(),
+        email: trimmedEmail,
         password,
-        role,
+
+        // Public registration is only for applicants.
+        role: "APPLICANT",
       });
 
-      console.log("Registration successful:", response);
-
-      setSuccess(
-        "Registration successful! Redirecting to login..."
-      );
+      setSuccess("Registration successful! Redirecting to login...");
 
       setName("");
       setEmail("");
       setPassword("");
-      setRole("APPLICANT");
+
+      setOtp("");
+      setOtpSent(false);
+      setEmailVerified(false);
+      clearOtpMessages();
 
       setTimeout(() => {
         navigate("/login");
@@ -50,397 +265,209 @@ function Register() {
       console.error("Registration failed:", error);
 
       setError(
-        error.message ||
-          "Registration failed. Please try again."
+        error.message || "Registration failed. Please try again."
       );
     } finally {
       setLoading(false);
     }
   };
 
+  /* =========================================================
+     BUTTON LABEL: SEND / RESEND OTP
+     ========================================================= */
+
+  const renderSendOtpLabel = () => {
+    if (otpLoading) {
+      return (
+        <>
+          <span className="register-spinner"></span>
+          Sending...
+        </>
+      );
+    }
+
+    if (emailVerified) {
+      return <>Verified ✓</>;
+    }
+
+    if (otpSent) {
+      return <>Resend OTP</>;
+    }
+
+    return <>Send OTP</>;
+  };
+
+  /* =========================================================
+     UI
+     ========================================================= */
+
   return (
     <div className="register-page">
-
-      {/* =====================================================
-          LEFT BRANDING SECTION
-          ===================================================== */}
-
-      <section className="register-brand-section">
-
-        <div className="register-brand-decoration register-decoration-one"></div>
-        <div className="register-brand-decoration register-decoration-two"></div>
-
-        <div className="register-brand-content">
-
-          <div className="register-logo">
-            RS
-          </div>
-
-          <span className="register-brand-label">
-            RESUME SCREENING SYSTEM
-          </span>
-
-          <h1>
-            Start your
-            <br />
-            <span>journey today.</span>
-          </h1>
-
-          <p className="register-brand-description">
-            Create your account and experience a smarter way
-            to connect applicants with opportunities and help
-            recruiters discover the right candidates.
-          </p>
-
-          <div className="register-feature-list">
-
-            <div className="register-feature">
-
-              <div className="register-feature-icon">
-                ✓
-              </div>
-
-              <div>
-                <strong>
-                  Smart Resume Screening
-                </strong>
-
-                <span>
-                  Evaluate resumes efficiently with intelligent screening.
-                </span>
-              </div>
-
-            </div>
-
-            <div className="register-feature">
-
-              <div className="register-feature-icon">
-                ✓
-              </div>
-
-              <div>
-                <strong>
-                  Better Job Matching
-                </strong>
-
-                <span>
-                  Connect skills and opportunities more effectively.
-                </span>
-              </div>
-
-            </div>
-
-            <div className="register-feature">
-
-              <div className="register-feature-icon">
-                ✓
-              </div>
-
-              <div>
-                <strong>
-                  Simple Recruitment Process
-                </strong>
-
-                <span>
-                  Manage jobs, resumes, and applications in one place.
-                </span>
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        <div className="register-brand-footer">
-          Resume Screening & Ranking System
-        </div>
-
-      </section>
-
-
-      {/* =====================================================
-          RIGHT REGISTRATION SECTION
-          ===================================================== */}
-
-      <section className="register-form-section">
-
+      <section className="register-panel">
         <div className="register-card">
 
-          {/* Mobile logo */}
-          <div className="register-mobile-logo">
-            RS
-          </div>
+          {/* ---------- Logo ---------- */}
+          <div className="register-logo">RS</div>
 
-          {/* Header */}
+          {/* ---------- Header ---------- */}
           <div className="register-header">
+            <span className="register-eyebrow">GET STARTED</span>
 
-            <span className="register-eyebrow">
-              GET STARTED
-            </span>
-
-            <h2>
-              Create your account
-            </h2>
+            <h2>Create your account</h2>
 
             <p>
-              Enter your details to create your
-              Resume Screening System account.
+              Enter your details to create your Resume Screening System
+              account.
             </p>
-
           </div>
 
+          {/* ---------- Form ---------- */}
+          <form className="register-form" onSubmit={handleRegister}>
 
-          {/* Form */}
-          <form
-            className="register-form"
-            onSubmit={handleRegister}
-          >
-
-            {/* =================================================
-                NAME
-                ================================================= */}
-
+            {/* ===== 1. Full name ===== */}
             <div className="register-field">
-
-              <label htmlFor="register-name">
-                Full Name
-              </label>
+              <label htmlFor="register-name">Full name</label>
 
               <div className="register-input-wrapper">
-
-                <span className="register-input-icon">
-                  ◉
-                </span>
+                <span className="register-input-icon">◉</span>
 
                 <input
                   id="register-name"
                   type="text"
                   placeholder="Enter your full name"
                   value={name}
-                  onChange={(event) =>
-                    setName(event.target.value)
-                  }
+                  onChange={(event) => setName(event.target.value)}
                   required
                 />
-
               </div>
-
             </div>
 
+            {/* ===== 2. Email verification ===== */}
+            <div className="register-verify-box">
 
-            {/* =================================================
-                EMAIL
-                ================================================= */}
+              {/* Email + Send OTP */}
+              <div className="register-field">
+                <label htmlFor="register-email">Email address</label>
 
-            <div className="register-field">
+                <div className="register-inline-row">
+                  <div className="register-input-wrapper">
+                    <span className="register-input-icon">@</span>
 
-              <label htmlFor="register-email">
-                Email Address
-              </label>
+                    <input
+                      id="register-email"
+                      type="email"
+                      placeholder="Enter your email address"
+                      value={email}
+                      onChange={handleEmailChange}
+                      required
+                    />
+                  </div>
 
-              <div className="register-input-wrapper">
-
-                <span className="register-input-icon">
-                  @
-                </span>
-
-                <input
-                  id="register-email"
-                  type="email"
-                  placeholder="Enter your email address"
-                  value={email}
-                  onChange={(event) =>
-                    setEmail(event.target.value)
-                  }
-                  required
-                />
-
+                  <button
+                    type="button"
+                    className={
+                      emailVerified
+                        ? "register-secondary-button verified"
+                        : "register-secondary-button"
+                    }
+                    onClick={handleSendOtp}
+                    disabled={otpLoading || emailVerified}
+                  >
+                    {renderSendOtpLabel()}
+                  </button>
+                </div>
               </div>
 
+              {/* OTP + Verify */}
+              {otpSent && !emailVerified && (
+                <div className="register-field">
+                  <label htmlFor="register-otp">
+                    Email verification OTP
+                  </label>
+
+                  <div className="register-inline-row">
+                    <div className="register-input-wrapper">
+                      <span className="register-input-icon">#</span>
+
+                      <input
+                        id="register-otp"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP"
+                        value={otp}
+                        onChange={handleOtpChange}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="register-secondary-button"
+                      onClick={handleVerifyOtp}
+                      disabled={verifyLoading || otp.length !== 6}
+                    >
+                      {verifyLoading ? (
+                        <>
+                          <span className="register-spinner"></span>
+                          Verifying...
+                        </>
+                      ) : (
+                        <>Verify OTP</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Verification messages: shown right below the fields */}
+              {otpError && (
+                <StatusMessage type="error">{otpError}</StatusMessage>
+              )}
+
+              {otpSuccess && (
+                <StatusMessage type="success">{otpSuccess}</StatusMessage>
+              )}
             </div>
 
-
-            {/* =================================================
-                PASSWORD
-                ================================================= */}
-
+            {/* ===== 3. Password ===== */}
             <div className="register-field">
+              <label htmlFor="register-password">Password</label>
 
-              <label htmlFor="register-password">
-                Password
-              </label>
-
-              <div className="register-password-wrapper">
-
-                <span className="register-input-icon">
-                  •
-                </span>
+              <div className="register-input-wrapper register-password-wrapper">
+                <span className="register-input-icon">•</span>
 
                 <input
                   id="register-password"
-                  type={
-                    showPassword
-                      ? "text"
-                      : "password"
-                  }
+                  type={showPassword ? "text" : "password"}
                   placeholder="Create a password"
                   value={password}
-                  onChange={(event) =>
-                    setPassword(event.target.value)
-                  }
+                  onChange={(event) => setPassword(event.target.value)}
                   required
                 />
 
                 <button
                   type="button"
                   className="register-password-toggle"
-                  onClick={() =>
-                    setShowPassword(!showPassword)
-                  }
+                  onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
-
               </div>
-
             </div>
 
-
-            {/* =================================================
-                ROLE
-                ================================================= */}
-
-            <div className="register-field">
-
-              <label>
-                Account Type
-              </label>
-
-              <div className="register-role-grid">
-
-                <button
-                  type="button"
-                  className={`register-role-option ${
-                    role === "APPLICANT"
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setRole("APPLICANT")
-                  }
-                >
-
-                  <span className="register-role-icon">
-                    👤
-                  </span>
-
-                  <span className="register-role-text">
-                    <strong>
-                      Applicant
-                    </strong>
-
-                    <small>
-                      Apply for jobs
-                    </small>
-                  </span>
-
-                  <span className="register-role-check">
-                    {role === "APPLICANT" ? "✓" : ""}
-                  </span>
-
-                </button>
-
-
-                <button
-                  type="button"
-                  className={`register-role-option ${
-                    role === "RECRUITER"
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setRole("RECRUITER")
-                  }
-                >
-
-                  <span className="register-role-icon">
-                    💼
-                  </span>
-
-                  <span className="register-role-text">
-                    <strong>
-                      Recruiter
-                    </strong>
-
-                    <small>
-                      Manage candidates
-                    </small>
-                  </span>
-
-                  <span className="register-role-check">
-                    {role === "RECRUITER" ? "✓" : ""}
-                  </span>
-
-                </button>
-
-              </div>
-
-              <small className="register-field-help">
-                Choose the account type you want to create.
-              </small>
-
-            </div>
-
-
-            {/* =================================================
-                ERROR
-                ================================================= */}
-
-            {error && (
-              <div className="register-alert register-alert-error">
-
-                <span className="register-alert-icon">
-                  !
-                </span>
-
-                <p>
-                  {error}
-                </p>
-
-              </div>
-            )}
-
-
-            {/* =================================================
-                SUCCESS
-                ================================================= */}
+            {/* ===== 4. Account creation messages ===== */}
+            {error && <StatusMessage type="error">{error}</StatusMessage>}
 
             {success && (
-              <div className="register-alert register-alert-success">
-
-                <span className="register-alert-icon">
-                  ✓
-                </span>
-
-                <p>
-                  {success}
-                </p>
-
-              </div>
+              <StatusMessage type="success">{success}</StatusMessage>
             )}
 
-
-            {/* =================================================
-                SUBMIT
-                ================================================= */}
-
+            {/* ===== 5. Create account ===== */}
             <button
               type="submit"
               className="register-submit-button"
-              disabled={loading}
+              disabled={loading || !emailVerified}
             >
-
               {loading ? (
                 <>
                   <span className="register-spinner"></span>
@@ -452,39 +479,25 @@ function Register() {
                   <span>→</span>
                 </>
               )}
-
             </button>
 
+            {!emailVerified && (
+              <small className="register-help">
+                Please verify your email before creating your account.
+              </small>
+            )}
           </form>
 
+          {/* ---------- Login link ---------- */}
+          <div className="register-footer">
+            <span>Already have an account?</span>
 
-          {/* =================================================
-              LOGIN LINK
-              ================================================= */}
-
-          <div className="register-login-section">
-
-            <span>
-              Already have an account?
-            </span>
-
-            <Link to="/login">
-              Sign in
-            </Link>
-
+            <Link to="/login">Sign in</Link>
           </div>
-
-          <div className="register-security-note">
-            Your account information is securely protected.
-          </div>
-
         </div>
-
       </section>
-
     </div>
   );
 }
 
 export default Register;
-

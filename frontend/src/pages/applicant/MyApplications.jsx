@@ -2,6 +2,66 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../services/api";
 
+/* =========================================================
+   HELPERS (pure functions, no component state needed)
+   ========================================================= */
+
+const formatDate = (date) => {
+  if (!date) {
+    return "N/A";
+  }
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "N/A";
+  }
+
+  return parsedDate.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const getStatusClass = (status) => {
+  const value = String(status || "").toLowerCase();
+
+  if (
+    value.includes("accept") ||
+    value.includes("selected") ||
+    value.includes("shortlist")
+  ) {
+    return "application-status status-success";
+  }
+
+  if (value.includes("reject") || value.includes("declin")) {
+    return "application-status status-danger";
+  }
+
+  if (value.includes("review") || value.includes("screen")) {
+    return "application-status status-info";
+  }
+
+  return "application-status status-pending";
+};
+
+const getStatusLabel = (status) => {
+  if (!status) {
+    return "Submitted";
+  }
+
+  return String(status)
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+/* =========================================================
+   MY APPLICATIONS PAGE
+   ========================================================= */
+
 function MyApplications() {
   const navigate = useNavigate();
 
@@ -9,29 +69,23 @@ function MyApplications() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  /* ---------- Load applications and match them with jobs ---------- */
   useEffect(() => {
     const fetchApplications = async () => {
       try {
-        const storedUser = localStorage.getItem("user");
+        // Get logged-in applicant from server session
+        const user = await api.get("/users/me");
 
-        if (!storedUser) {
-          setError("User information not found. Please login again.");
-          setLoading(false);
-          return;
-        }
+        console.log("Logged-in applicant:", user);
 
-        const user = JSON.parse(storedUser);
-
-        if (!user?.userId) {
+        if (!user?.userUuid) {
           setError("User information not found. Please login again.");
           setLoading(false);
           return;
         }
 
         // Fetch user's applications
-        const applicationData = await api.get(
-          `/applications/applicant/${user.userId}`
-        );
+        const applicationData = await api.get("/applications/me");
 
         // Fetch all jobs to get job names/details
         const jobsData = await api.get("/jobs");
@@ -40,30 +94,36 @@ function MyApplications() {
           ? applicationData
           : [];
 
-        const jobsList = Array.isArray(jobsData)
-          ? jobsData
-          : [];
+        const jobsList = Array.isArray(jobsData) ? jobsData : [];
 
         // Match each application's jobId with the corresponding job
         const applicationsWithJobDetails = applicationList.map(
           (application) => {
             const matchingJob = jobsList.find(
-              (job) =>
-                Number(job.jobId) === Number(application.jobId)
+              (job) => Number(job.jobId) === Number(application.jobId)
             );
 
             return {
               ...application,
-              jobTitle: matchingJob?.title || matchingJob?.jobTitle || "Job Not Found",
+              jobTitle:
+                matchingJob?.title ||
+                matchingJob?.jobTitle ||
+                "Job Not Found",
               jobLocation: matchingJob?.location || "",
             };
           }
         );
 
+        console.log(
+          "Applications with job details:",
+          applicationsWithJobDetails
+        );
+
         setApplications(applicationsWithJobDetails);
       } catch (err) {
         console.error("Failed to load applications:", err);
-        setError("Unable to load your applications.");
+
+        setError(err?.message || "Unable to load your applications.");
       } finally {
         setLoading(false);
       }
@@ -72,71 +132,9 @@ function MyApplications() {
     fetchApplications();
   }, []);
 
-  const formatDate = (date) => {
-    if (!date) {
-      return "N/A";
-    }
-
-    const parsedDate = new Date(date);
-
-    if (Number.isNaN(parsedDate.getTime())) {
-      return "N/A";
-    }
-
-    return parsedDate.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const getStatusClass = (status) => {
-    const value = String(status || "").toLowerCase();
-
-    if (
-      value.includes("accept") ||
-      value.includes("selected") ||
-      value.includes("shortlist")
-    ) {
-      return "application-status status-success";
-    }
-
-    if (
-      value.includes("reject") ||
-      value.includes("declin")
-    ) {
-      return "application-status status-danger";
-    }
-
-    if (
-      value.includes("review") ||
-      value.includes("screen")
-    ) {
-      return "application-status status-info";
-    }
-
-    return "application-status status-pending";
-  };
-
-  const getStatusLabel = (status) => {
-    if (!status) {
-      return "Submitted";
-    }
-
-    return String(status)
-      .toLowerCase()
-      .split("_")
-      .map(
-        (word) =>
-          word.charAt(0).toUpperCase() + word.slice(1)
-      )
-      .join(" ");
-  };
-
+  /* ---------- Summary numbers ---------- */
   const pendingCount = applications.filter((application) => {
-    const status = String(
-      application.status || ""
-    ).toLowerCase();
+    const status = String(application.status || "").toLowerCase();
 
     return (
       !status.includes("reject") &&
@@ -146,16 +144,12 @@ function MyApplications() {
   }).length;
 
   const rejectedCount = applications.filter((application) => {
-    const status = String(
-      application.status || ""
-    ).toLowerCase();
+    const status = String(application.status || "").toLowerCase();
 
-    return (
-      status.includes("reject") ||
-      status.includes("declin")
-    );
+    return status.includes("reject") || status.includes("declin");
   }).length;
 
+  /* ---------- Loading ---------- */
   if (loading) {
     return (
       <div className="applicant-applications-page">
@@ -167,27 +161,22 @@ function MyApplications() {
     );
   }
 
+  /* ---------- Error ---------- */
   if (error) {
     return (
       <div className="applicant-applications-page">
         <div className="applications-header">
           <div>
-            <span className="applications-eyebrow">
-              APPLICATIONS
-            </span>
+            <span className="applications-eyebrow">APPLICATIONS</span>
 
             <h1>My Applications</h1>
 
-            <p>
-              Track the jobs you have applied for.
-            </p>
+            <p>Track the jobs you have applied for.</p>
           </div>
         </div>
 
         <div className="applications-error">
-          <div className="applications-error-icon">
-            !
-          </div>
+          <div className="applications-error-icon">!</div>
 
           <h2>Unable to load applications</h2>
 
@@ -205,6 +194,7 @@ function MyApplications() {
     );
   }
 
+  /* ---------- Page ---------- */
   return (
     <div className="applicant-applications-page">
 
@@ -212,15 +202,11 @@ function MyApplications() {
 
       <div className="applications-header">
         <div>
-          <span className="applications-eyebrow">
-            APPLICATIONS
-          </span>
+          <span className="applications-eyebrow">APPLICATIONS</span>
 
           <h1>My Applications</h1>
 
-          <p>
-            Track and manage the jobs you have applied for.
-          </p>
+          <p>Track and manage the jobs you have applied for.</p>
         </div>
 
         <button
@@ -237,9 +223,7 @@ function MyApplications() {
       <div className="applications-summary">
 
         <div className="applications-summary-card">
-          <div className="summary-icon">
-            ≡
-          </div>
+          <div className="summary-icon summary-icon-total">≡</div>
 
           <div>
             <span>Total Applications</span>
@@ -248,9 +232,7 @@ function MyApplications() {
         </div>
 
         <div className="applications-summary-card">
-          <div className="summary-icon">
-            ◷
-          </div>
+          <div className="summary-icon summary-icon-progress">◷</div>
 
           <div>
             <span>In Progress</span>
@@ -259,9 +241,7 @@ function MyApplications() {
         </div>
 
         <div className="applications-summary-card">
-          <div className="summary-icon">
-            ×
-          </div>
+          <div className="summary-icon summary-icon-rejected">×</div>
 
           <div>
             <span>Not Selected</span>
@@ -279,16 +259,12 @@ function MyApplications() {
           <div>
             <h2>Application History</h2>
 
-            <p>
-              Your submitted applications and their current status.
-            </p>
+            <p>Your submitted applications and their current status.</p>
           </div>
 
           <span className="applications-count">
             {applications.length}{" "}
-            {applications.length === 1
-              ? "Application"
-              : "Applications"}
+            {applications.length === 1 ? "Application" : "Applications"}
           </span>
         </div>
 
@@ -297,16 +273,13 @@ function MyApplications() {
         {applications.length === 0 ? (
           <div className="applications-empty">
 
-            <div className="applications-empty-icon">
-              □
-            </div>
+            <div className="applications-empty-icon">□</div>
 
             <h3>No applications yet</h3>
 
             <p>
-              You haven't applied for any jobs yet.
-              Explore available opportunities and submit
-              your application.
+              You haven't applied for any jobs yet. Explore available
+              opportunities and submit your application.
             </p>
 
             <button
@@ -334,27 +307,23 @@ function MyApplications() {
 
                 <div className="application-main">
 
+                  {/* First letter of the job title */}
                   <div className="application-avatar">
-                    A
+                    {application.jobTitle
+                      ? application.jobTitle.charAt(0).toUpperCase()
+                      : "A"}
                   </div>
 
                   <div className="application-title">
 
-                    <span className="application-number">
-                      APPLICATION #
-                      {application.applicationId}
-                    </span>
+                    {/*<span className="application-number">
+                      APPLICATION #{application.applicationId}
+                    </span>*/}
 
-                    {/* JOB NAME INSTEAD OF JOB ID */}
-
-                    <h3>
-                      {application.jobTitle}
-                    </h3>
+                    <h3>{application.jobTitle}</h3>
 
                     {application.jobLocation && (
-                      <p>
-                        📍 {application.jobLocation}
-                      </p>
+                      <p>📍 {application.jobLocation}</p>
                     )}
 
                   </div>
@@ -366,37 +335,18 @@ function MyApplications() {
                 <div className="application-details">
 
                   <div className="application-detail">
-                    <span>Resume</span>
-
-                    <strong>
-                      Resume #
-                      {application.resumeId || "N/A"}
-                    </strong>
-                  </div>
-
-                  <div className="application-detail">
                     <span>Applied On</span>
 
-                    <strong>
-                      {formatDate(
-                        application.appliedAt
-                      )}
-                    </strong>
+                    <strong>{formatDate(application.appliedAt)}</strong>
                   </div>
 
                   <div className="application-detail">
                     <span>Status</span>
 
-                    <span
-                      className={getStatusClass(
-                        application.status
-                      )}
-                    >
+                    <span className={getStatusClass(application.status)}>
                       <span className="status-dot"></span>
 
-                      {getStatusLabel(
-                        application.status
-                      )}
+                      {getStatusLabel(application.status)}
                     </span>
                   </div>
 

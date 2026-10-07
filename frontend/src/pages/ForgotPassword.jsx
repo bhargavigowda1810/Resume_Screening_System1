@@ -1,299 +1,345 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+const OTP_REGEX = /^\d{6}$/;
+
+/* =========================================================
+   SMALL REUSABLE COMPONENT
+   Shows an error or success message
+   ========================================================= */
+
+function StatusMessage({ type, children }) {
+  const isError = type === "error";
+
+  return (
+    <div
+      className={
+        isError
+          ? "forgot-alert forgot-alert-error"
+          : "forgot-alert forgot-alert-success"
+      }
+      role={isError ? "alert" : "status"}
+    >
+      <span className="forgot-alert-icon">{isError ? "!" : "✓"}</span>
+
+      <span>{children}</span>
+    </div>
+  );
+}
+
+/* =========================================================
+   FORGOT PASSWORD PAGE
+   ========================================================= */
+
 function ForgotPassword() {
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+
+  const [otpSent, setOtpSent] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
-  const handleSubmit = async (event) => {
+  /* =========================================================
+     EMAIL CHANGE
+     If the user changes the email after requesting an OTP,
+     the OTP verification step is reset.
+     ========================================================= */
+
+  const handleEmailChange = (event) => {
+    setEmail(event.target.value);
+
+    setOtp("");
+    setOtpSent(false);
+
+    setMessage("");
+    setError("");
+  };
+
+  /* =========================================================
+     SEND PASSWORD RESET OTP
+     ========================================================= */
+
+  const handleSendOtp = async (event) => {
     event.preventDefault();
 
     setMessage("");
     setError("");
+
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await api.post("/users/forgot-password", {
-        email: email,
+      const response = await api.post("/users/send-password-reset-otp", {
+        email: email.trim(),
       });
 
+      setOtpSent(true);
+
       setMessage(
-        "If an account exists with this email, " +
-          "a password reset link has been sent to your email."
+        response.data ||
+          "If an account exists with this email, " +
+            "a password reset OTP has been sent."
       );
     } catch (error) {
-      console.error("Forgot password failed:", error);
+      console.error("Password reset OTP request failed:", error);
 
-      setError(
-        error.message ||
-          "Unable to process your request. Please try again."
-      );
+      setError(error.message || "Unable to send OTP. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  /* =========================================================
+     VERIFY PASSWORD RESET OTP
+     ========================================================= */
+
+  const handleVerifyOtp = async (event) => {
+    event.preventDefault();
+
+    setMessage("");
+    setError("");
+
+    if (!OTP_REGEX.test(otp)) {
+      setError("Please enter the 6-digit OTP.");
+      return;
+    }
+
+    setVerifyLoading(true);
+
+    try {
+      const response = await api.post("/users/verify-password-reset-otp", {
+        email: email.trim(),
+        otp: otp,
+      });
+
+      // Backend returns the password reset token after successful
+      // OTP verification.
+      const token = response?.token;
+
+      if (!token) {
+        throw new Error("Password reset token was not received.");
+      }
+
+      // Open the existing ResetPassword page.
+      // ResetPassword.jsx reads the token from the URL.
+      navigate(`/reset-password?token=${encodeURIComponent(token)}`);
+    } catch (error) {
+      console.error("Password reset OTP verification failed:", error);
+
+      setError(error.message || "Unable to verify OTP. Please try again.");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  /* =========================================================
+     OTP INPUT CHANGE (digits only)
+     ========================================================= */
+
+  const handleOtpChange = (event) => {
+    const value = event.target.value.replace(/\D/g, "");
+
+    setOtp(value);
+    setError("");
+    setMessage("");
+  };
+
+  /* =========================================================
+     CHANGE EMAIL (go back to the first step)
+     ========================================================= */
+
+  const handleChangeEmail = () => {
+    setOtpSent(false);
+    setOtp("");
+    setMessage("");
+    setError("");
+  };
+
+  /* =========================================================
+     UI
+     ========================================================= */
+
   return (
     <div className="forgot-page">
-
-      {/* =====================================================
-          LEFT BRANDING SECTION
-          ===================================================== */}
-
-      <section className="forgot-brand-section">
-
-        <div className="forgot-decoration forgot-decoration-one"></div>
-        <div className="forgot-decoration forgot-decoration-two"></div>
-
-        <div className="forgot-brand-content">
-
-          <div className="forgot-logo">
-            RS
-          </div>
-
-          <span className="forgot-brand-label">
-            RESUME SCREENING SYSTEM
-          </span>
-
-          <h1>
-            Secure access,
-            <br />
-            <span>simple recovery.</span>
-          </h1>
-
-          <p className="forgot-brand-description">
-            Recover access to your account securely and
-            continue managing your resumes, applications,
-            jobs, and candidates.
-          </p>
-
-          <div className="forgot-feature-list">
-
-            <div className="forgot-feature">
-
-              <div className="forgot-feature-icon">
-                ✓
-              </div>
-
-              <div>
-                <strong>
-                  Secure account recovery
-                </strong>
-
-                <span>
-                  Request a password reset using your registered email.
-                </span>
-              </div>
-
-            </div>
-
-            <div className="forgot-feature">
-
-              <div className="forgot-feature-icon">
-                ✓
-              </div>
-
-              <div>
-                <strong>
-                  Simple process
-                </strong>
-
-                <span>
-                  Enter your email and follow the reset instructions.
-                </span>
-              </div>
-
-            </div>
-
-            <div className="forgot-feature">
-
-              <div className="forgot-feature-icon">
-                ✓
-              </div>
-
-              <div>
-                <strong>
-                  Continue where you left off
-                </strong>
-
-                <span>
-                  Get back to your account and continue your work.
-                </span>
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        <div className="forgot-brand-footer">
-          Resume Screening & Ranking System
-        </div>
-
-      </section>
-
-
-      {/* =====================================================
-          RIGHT RECOVERY SECTION
-          ===================================================== */}
-
-      <section className="forgot-form-section">
-
+      <section className="forgot-panel">
         <div className="forgot-card">
 
-          {/* Mobile logo */}
-          <div className="forgot-mobile-logo">
-            RS
-          </div>
+          {/* ---------- Logo ---------- */}
+          <div className="forgot-logo">RS</div>
 
-          {/* Recovery icon */}
-          <div className="forgot-icon-container">
-            <span>
-              ↻
-            </span>
-          </div>
-
-          {/* Header */}
+          {/* ---------- Header ---------- */}
           <div className="forgot-header">
+            <span className="forgot-eyebrow">ACCOUNT RECOVERY</span>
 
-            <span className="forgot-eyebrow">
-              ACCOUNT RECOVERY
-            </span>
-
-            <h2>
-              Forgot your password?
-            </h2>
+            <h2>Forgot your password?</h2>
 
             <p>
-              No worries. Enter your registered email address
-              and we'll help you reset your password.
+              No worries. Verify your registered email and we'll help you
+              reset your password.
             </p>
-
           </div>
 
+          {/* ===================================================
+              STEP 1: EMAIL FORM
+              =================================================== */}
 
-          {/* Form */}
-          <form
-            className="forgot-form"
-            onSubmit={handleSubmit}
-          >
+          {!otpSent && (
+            <form className="forgot-form" onSubmit={handleSendOtp}>
 
-            <div className="forgot-field">
+              <div className="forgot-field">
+                <label htmlFor="forgot-email">Email address</label>
 
-              <label htmlFor="forgot-email">
-                Email Address
-              </label>
+                <div className="forgot-input-wrapper">
+                  <span className="forgot-input-icon">@</span>
 
-              <div className="forgot-input-wrapper">
-
-                <span className="forgot-input-icon">
-                  @
-                </span>
-
-                <input
-                  id="forgot-email"
-                  type="email"
-                  placeholder="Enter your registered email"
-                  value={email}
-                  onChange={(event) =>
-                    setEmail(event.target.value)
-                  }
-                  required
-                  disabled={loading}
-                />
-
+                  <input
+                    id="forgot-email"
+                    type="email"
+                    placeholder="Enter your registered email"
+                    value={email}
+                    onChange={handleEmailChange}
+                    required
+                    disabled={loading}
+                  />
+                </div>
               </div>
 
-            </div>
+              {error && <StatusMessage type="error">{error}</StatusMessage>}
 
-
-            {/* Error */}
-            {error && (
-              <div className="forgot-alert forgot-alert-error">
-
-                <span className="forgot-alert-icon">
-                  !
-                </span>
-
-                <p>
-                  {error}
-                </p>
-
-              </div>
-            )}
-
-
-            {/* Success */}
-            {message && (
-              <div className="forgot-alert forgot-alert-success">
-
-                <span className="forgot-alert-icon">
-                  ✓
-                </span>
-
-                <p>
-                  {message}
-                </p>
-
-              </div>
-            )}
-
-
-            {/* Send button */}
-            <button
-              type="submit"
-              className="forgot-submit-button"
-              disabled={loading}
-            >
-
-              {loading ? (
-                <>
-                  <span className="forgot-spinner"></span>
-                  Sending...
-                </>
-              ) : (
-                <>
-                  Send Reset Link
-                  <span>→</span>
-                </>
+              {message && (
+                <StatusMessage type="success">{message}</StatusMessage>
               )}
 
-            </button>
+              <button
+                type="submit"
+                className="forgot-submit-button"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <span className="forgot-spinner"></span>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    Send OTP
+                    <span>→</span>
+                  </>
+                )}
+              </button>
 
-          </form>
+            </form>
+          )}
 
+          {/* ===================================================
+              STEP 2: OTP FORM
+              =================================================== */}
 
-          {/* Back to Login */}
+          {otpSent && (
+            <form className="forgot-form" onSubmit={handleVerifyOtp}>
+
+              <div className="forgot-field">
+                <label htmlFor="forgot-email">Email address</label>
+
+                <div className="forgot-input-wrapper">
+                  <span className="forgot-input-icon">@</span>
+
+                  <input
+                    id="forgot-email"
+                    type="email"
+                    value={email}
+                    disabled
+                  />
+                </div>
+              </div>
+
+              <div className="forgot-field">
+                <label htmlFor="forgot-otp">Verification OTP</label>
+
+                <div className="forgot-input-wrapper">
+                  <span className="forgot-input-icon">#</span>
+
+                  <input
+                    id="forgot-otp"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Enter 6-digit OTP"
+                    value={otp}
+                    onChange={handleOtpChange}
+                    required
+                    disabled={verifyLoading}
+                  />
+                </div>
+              </div>
+
+              {error && <StatusMessage type="error">{error}</StatusMessage>}
+
+              {message && (
+                <StatusMessage type="success">{message}</StatusMessage>
+              )}
+
+              <button
+                type="submit"
+                className="forgot-submit-button"
+                disabled={verifyLoading || otp.length !== 6}
+              >
+                {verifyLoading ? (
+                  <>
+                    <span className="forgot-spinner"></span>
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    Verify OTP
+                    <span>→</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className="forgot-secondary-button"
+                onClick={handleChangeEmail}
+                disabled={verifyLoading}
+              >
+                Change Email
+              </button>
+
+            </form>
+          )}
+
+          {/* ---------- Footer ---------- */}
           <div className="forgot-footer">
+            <span>Remember your password?</span>
 
-            <span>
-              Remember your password?
-            </span>
-
-            <Link to="/login">
-              Back to Login
-            </Link>
-
+            <Link to="/login">Back to Login</Link>
           </div>
 
           <div className="forgot-security-note">
-            Password recovery instructions will be sent to your
-            registered email address.
+            A verification OTP will be sent to your registered email address.
           </div>
 
         </div>
-
       </section>
-
     </div>
   );
 }
 
 export default ForgotPassword;
-

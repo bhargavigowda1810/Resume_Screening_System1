@@ -5,6 +5,12 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import RecruiterVerifyOtp from "./pages/RecruiterVerifyOtp";
+
+// Administrator Pages
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import ViewRecruiters from "./pages/admin/ViewRecruiters";
+import CreateRecruiter from "./pages/admin/CreateRecruiter";
 
 // Applicant Pages
 import ApplicantDashboard from "./pages/applicant/ApplicantDashboard";
@@ -20,96 +26,200 @@ import RecruiterMyProfile from "./pages/recruiter/MyProfile";
 import CreateJob from "./pages/recruiter/CreateJob";
 import MyJobs from "./pages/recruiter/MyJobs";
 import ViewApplicants from "./pages/recruiter/ViewApplicants";
+import ResumeViewer from "./pages/recruiter/ResumeViewer";
 
 // Components
 import ProtectedRoute from "./components/ProtectedRoute";
 
+// Layouts
+import ApplicantLayout from "./layouts/ApplicantLayout";
+import RecruiterLayout from "./layouts/RecruiterLayout";
+import AdminLayout from "./layouts/AdminLayout";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* =========================
-            PUBLIC ROUTES
-        ========================= */}
+        {/* =====================================================
+            PUBLIC
+            ===================================================== */}
 
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route
+          path="/"
+          element={<Navigate to="/login" replace />}
+        />
 
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
-        {/* =========================
-            APPLICANT ROUTES
-        ========================= */}
+        <Route
+          path="/register"
+          element={<Register />}
+        />
 
-        <Route path="/applicant" element={
-          <ProtectedRoute allowedRole="APPLICANT"><ApplicantDashboard /></ProtectedRoute>
-        } />
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
+        />
 
-        <Route path="/applicant/profile" element={
-          <ProtectedRoute allowedRole="APPLICANT"><MyProfile /></ProtectedRoute>
-        } />
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
+        />
 
-        <Route path="/applicant/upload-resume" element={
-          <ProtectedRoute allowedRole="APPLICANT"><UploadResume /></ProtectedRoute>
-        } />
-
-        <Route path="/applicant/jobs" element={
-          <ProtectedRoute allowedRole="APPLICANT"><AvailableJobs /></ProtectedRoute>
-        } />
-
-        <Route path="/applicant/apply/:jobId" element={
-          <ProtectedRoute allowedRole="APPLICANT"><ApplyJob /></ProtectedRoute>
-        } />
-
-        <Route path="/applicant/applications" element={
-          <ProtectedRoute allowedRole="APPLICANT"><MyApplications /></ProtectedRoute>
-        } />
+        <Route
+          path="/verify-recruiter"
+          element={<RecruiterVerifyOtp />}
+        />
 
 
-        {/* =========================
-            RECRUITER ROUTES
-        ========================= */}
+        {/* =====================================================
+            APPLICANT
+            ===================================================== */}
 
-        <Route path="/recruiter" element={
-          <ProtectedRoute allowedRole="RECRUITER"><RecruiterDashboard /></ProtectedRoute>
-        } />
+        <Route
+          path="/applicant"
+          element={
+            <ProtectedRoute allowedRole="APPLICANT">
+              <ApplicantLayout />
+            </ProtectedRoute>
+          }
+        >
+          {/* /applicant */}
+          <Route
+            index
+            element={<ApplicantDashboard />}
+          />
 
-        <Route path="/recruiter/profile" element={
-          <ProtectedRoute allowedRole="RECRUITER"><RecruiterMyProfile /></ProtectedRoute>
-        } />
+          {/* /applicant/profile */}
+          <Route
+            path="profile"
+            element={<MyProfile />}
+          />
 
-        <Route path="/recruiter/create-job" element={
-          <ProtectedRoute allowedRole="RECRUITER"><CreateJob /></ProtectedRoute>
-        } />
+          {/* /applicant/upload-resume */}
+          <Route
+            path="upload-resume"
+            element={<UploadResume />}
+          />
 
-        <Route path="/recruiter/jobs" element={
-          <ProtectedRoute allowedRole="RECRUITER"><MyJobs /></ProtectedRoute>
-        } />
+          {/* /applicant/jobs */}
+          <Route
+            path="jobs"
+            element={<AvailableJobs />}
+          />
 
-        <Route path="/recruiter/applicants" element={
-          <ProtectedRoute allowedRole="RECRUITER"><ViewApplicants /></ProtectedRoute>
-        }/>
+          {/* /applicant/apply/:jobId */}
+          <Route
+            path="apply/:jobId"
+            element={<ApplyJob />}
+          />
 
-        <Route path="/recruiter/applicants/:jobId" element={
-          <ProtectedRoute allowedRole="RECRUITER"><ViewApplicants /></ProtectedRoute>
-        } />
+          {/* /applicant/applications */}
+          <Route
+            path="applications"
+            element={<MyApplications />}
+          />
+        </Route>
+
+        {/* =====================================================
+            RECRUITER
+            ===================================================== */}
+        <Route
+          path="/recruiter"
+          element={
+            <ProtectedRoute allowedRole="RECRUITER">
+              <RecruiterLayout />
+            </ProtectedRoute>
+          }
+        >
+          {/* /recruiter */}
+          <Route
+            index
+            element={<RecruiterDashboard />}
+          />
+
+          {/* /recruiter/profile */}
+          <Route
+            path="profile"
+            element={<RecruiterMyProfile />}
+          />
+
+          {/* /recruiter/create-job */}
+          <Route
+            path="create-job"
+            element={<CreateJob />}
+          />
+
+          {/* /recruiter/jobs */}
+          <Route
+            path="jobs"
+            element={<MyJobs />}
+          />
+
+          {/* /recruiter/applicants */}
+          <Route
+            path="applicants"
+            element={<ViewApplicants />}
+          />
+
+          {/* /recruiter/applicants/:jobId */}
+          <Route
+            path="applicants/:jobId"
+            element={<ViewApplicants />}
+          />
+
+          {/* /recruiter/resume-viewer/:resumeId */}
+          <Route
+            path="resume-viewer/:resumeId"
+            element={<ResumeViewer />}
+          />
+        </Route>
 
 
-        {/* =========================
-            UNKNOWN ROUTES
-        ========================= */}
+        {/* =====================================================
+            ADMIN
+            ===================================================== */}
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRole="ADMIN">
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={<AdminDashboard />}
+              />
+
+              <Route
+                path="recruiters"
+                element={<ViewRecruiters />}
+              />
+
+              <Route
+                path="create-recruiter"
+                element={<CreateRecruiter />}
+              />
+            </Route>
+
+        {/* =====================================================
+            UNKNOWN
+            ===================================================== */}
+
+        <Route
+          path="*"
+          element={<Navigate to="/login" replace />}
+        />
 
       </Routes>
     </BrowserRouter>
   );
 }
 
-
 export default App;
-

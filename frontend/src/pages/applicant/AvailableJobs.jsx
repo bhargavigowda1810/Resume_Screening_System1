@@ -17,7 +17,11 @@ function AvailableJobs() {
         setJobs(data);
       } catch (error) {
         console.error("Failed to load jobs:", error);
-        setError("Failed to load available jobs.");
+
+        setError(
+          error?.message ||
+          "Failed to load available jobs."
+        );
       } finally {
         setLoading(false);
       }
@@ -253,7 +257,7 @@ function AvailableJobs() {
                   <div className="available-job-heading">
 
                     <span className="available-job-id">
-                      JOB #{job.jobId}
+                      {/*JOB #{job.jobId}*/}
                     </span>
 
                     <h2>{job.title}</h2>
@@ -395,7 +399,7 @@ function AvailableJobs() {
                 <div>
 
                   <span>
-                    JOB #{selectedJob.jobId}
+                    {/*JOB #{selectedJob.jobId}*/}
                   </span>
 
                   <h2 id="job-details-title">
@@ -523,16 +527,6 @@ function AvailableJobs() {
                 </span>
 
                 <div className="job-details-information-grid">
-
-                  <div>
-                    <small>JOB ID</small>
-
-                    <strong>
-                      #{selectedJob.jobId}
-                    </strong>
-                  </div>
-
-
                   <div>
                     <small>LOCATION</small>
 

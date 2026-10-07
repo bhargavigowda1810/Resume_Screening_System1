@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../services/api";
 
 function UploadResume() {
   const navigate = useNavigate();
@@ -14,51 +15,37 @@ function UploadResume() {
   const [loading, setLoading] = useState(false);
   const [loadingResume, setLoadingResume] = useState(true);
 
+  // Controls whether the applicant is currently replacing the resume
+  const [isReuploading, setIsReuploading] = useState(false);
+
   // =========================================================
-  // LOAD EXISTING RESUME
+  // LOAD LOGGED-IN USER AND EXISTING RESUME
   // =========================================================
 
   useEffect(() => {
-    const loadExistingResume = async () => {
-      const storedUser = localStorage.getItem("user");
-
-      if (!storedUser) {
-        setMessage("User information not found. Please login again.");
-        setMessageType("error");
-        setLoadingResume(false);
-        return;
-      }
-
-      let user;
-
+    const loadUserAndResume = async () => {
       try {
-        user = JSON.parse(storedUser);
-      } catch (error) {
-        console.error("Invalid user information:", error);
+        // -----------------------------------------------------
+        // Verify logged-in user
+        // -----------------------------------------------------
 
-        setMessage("Invalid user information. Please login again.");
-        setMessageType("error");
-        setLoadingResume(false);
-        return;
-      }
+        const currentUser = await api.get("/users/me");
 
-      if (!user?.userId) {
-        setMessage("User information not found. Please login again.");
-        setMessageType("error");
-        setLoadingResume(false);
-        return;
-      }
+        console.log("Logged-in user:", currentUser);
 
-      try {
-        const response = await fetch(
-          `http://localhost:8081/api/resumes/applicant/${user.userId}`
-        );
-
-        if (!response.ok) {
-          throw new Error("Unable to load resume.");
+        if (!currentUser?.userUuid) {
+          setMessage(
+            "User information not found. Please login again."
+          );
+          setMessageType("error");
+          return;
         }
 
-        const resumes = await response.json();
+        // -----------------------------------------------------
+        // Load existing resumes using authenticated user
+        // -----------------------------------------------------
+
+        const resumes = await api.get("/resumes/me");
 
         console.log("Existing resumes:", resumes);
 
@@ -68,16 +55,56 @@ function UploadResume() {
           setExistingResume(null);
         }
       } catch (error) {
-        console.error("Failed to load existing resume:", error);
+        console.error(
+          "Failed to load user or existing resume:",
+          error
+        );
 
         setExistingResume(null);
+
+        setMessage(
+          error?.message ||
+            "Unable to load your resume information. Please try again."
+        );
+
+        setMessageType("error");
       } finally {
         setLoadingResume(false);
       }
     };
 
-    loadExistingResume();
+    loadUserAndResume();
   }, []);
+
+  // =========================================================
+  // START RE-UPLOAD
+  // =========================================================
+
+  const handleReupload = () => {
+    setIsReuploading(true);
+    setFile(null);
+    setMessage("");
+    setMessageType("");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // =========================================================
+  // CANCEL RE-UPLOAD
+  // =========================================================
+
+  const handleCancelReupload = () => {
+    setIsReuploading(false);
+    setFile(null);
+    setMessage("");
+    setMessageType("");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   // =========================================================
   // FILE SELECTION
@@ -108,7 +135,10 @@ function UploadResume() {
       fileName.endsWith(extension)
     );
 
-    if (!allowedTypes.includes(selectedFile.type) && !validExtension) {
+    if (
+      !allowedTypes.includes(selectedFile.type) &&
+      !validExtension
+    ) {
       setFile(null);
 
       setMessage("Please select a PDF, DOCX, or TXT file.");
@@ -125,7 +155,7 @@ function UploadResume() {
   };
 
   // =========================================================
-  // UPLOAD RESUME
+  // UPLOAD / REPLACE RESUME
   // =========================================================
 
   const handleUpload = async () => {
@@ -135,28 +165,12 @@ function UploadResume() {
       return;
     }
 
-    const storedUser = localStorage.getItem("user");
+    const token = localStorage.getItem("token");
 
-    if (!storedUser) {
-      setMessage("User information not found. Please login again.");
-      setMessageType("error");
-      return;
-    }
-
-    let user;
-
-    try {
-      user = JSON.parse(storedUser);
-    } catch (error) {
-      console.error("Invalid user information:", error);
-
-      setMessage("Invalid user information. Please login again.");
-      setMessageType("error");
-      return;
-    }
-
-    if (!user?.userId) {
-      setMessage("User information not found. Please login again.");
+    if (!token) {
+      setMessage(
+        "Authentication token not found. Please login again."
+      );
       setMessageType("error");
       return;
     }
@@ -164,47 +178,78 @@ function UploadResume() {
     const formData = new FormData();
 
     formData.append("file", file);
-    formData.append("applicantId", user.userId);
 
     setLoading(true);
     setMessage("");
     setMessageType("");
 
     try {
+      // -----------------------------------------------------
+      // Upload / replace resume
+      // -----------------------------------------------------
+
       const response = await fetch(
         "http://localhost:8081/api/resumes/parse",
         {
           method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
           body: formData,
         }
       );
 
-      const result = await response.text();
+      const contentType =
+        response.headers.get("content-type") || "";
 
-      if (!response.ok) {
-        throw new Error(result || "Unable to process the resume.");
+      let result;
+
+      if (contentType.includes("application/json")) {
+        result = await response.json();
+      } else {
+        result = await response.text();
       }
 
-      setMessage("Resume uploaded and processed successfully!");
-      setMessageType("success");
+      if (!response.ok) {
+        const errorMessage =
+          typeof result === "string"
+            ? result
+            : result?.message ||
+              "Unable to process the resume.";
+
+        throw new Error(errorMessage);
+      }
 
       console.log("Resume processing result:", result);
+
+      // -----------------------------------------------------
+      // Success message
+      // -----------------------------------------------------
+
+      setMessage(
+        existingResume
+          ? "Resume replaced and processed successfully!"
+          : "Resume uploaded and processed successfully!"
+      );
+
+      setMessageType("success");
 
       // -----------------------------------------------------
       // Reload existing resume after successful upload
       // -----------------------------------------------------
 
       try {
-        const resumeResponse = await fetch(
-          `http://localhost:8081/api/resumes/applicant/${user.userId}`
+        const resumes = await api.get("/resumes/me");
+
+        console.log(
+          "Updated resumes after upload:",
+          resumes
         );
 
-        if (resumeResponse.ok) {
-          const resumes = await resumeResponse.json();
-
-          if (Array.isArray(resumes) && resumes.length > 0) {
-            setExistingResume(resumes[resumes.length - 1]);
-          }
+        if (Array.isArray(resumes) && resumes.length > 0) {
+          setExistingResume(resumes[resumes.length - 1]);
+        } else {
+          setExistingResume(null);
         }
       } catch (error) {
         console.error(
@@ -213,17 +258,22 @@ function UploadResume() {
         );
       }
 
+      // -----------------------------------------------------
+      // Clear selected file
+      // -----------------------------------------------------
+
       setFile(null);
+      setIsReuploading(false);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-
     } catch (error) {
       console.error("Upload failed:", error);
 
       setMessage(
-        "Resume upload failed. Please try again."
+        error?.message ||
+          "Resume upload failed. Please try again."
       );
 
       setMessageType("error");
@@ -264,22 +314,13 @@ function UploadResume() {
             RESUME
           </span>
 
-          <h1>Upload Resume</h1>
+          <h1>Resume</h1>
 
           <p>
             Upload your latest resume to use it for job
             applications and AI-powered screening.
           </p>
         </div>
-
-        <button
-          type="button"
-          className="applicant-upload-back-btn"
-          onClick={() => navigate("/applicant")}
-        >
-          ← Dashboard
-        </button>
-
       </div>
 
 
@@ -315,14 +356,6 @@ function UploadResume() {
                     "Resume uploaded"}
                 </h3>
 
-                <p>
-                  Resume ID:
-                  <strong>
-                    {" "}
-                    {existingResume.resumeId || "N/A"}
-                  </strong>
-                </p>
-
               </div>
 
             </div>
@@ -337,211 +370,339 @@ function UploadResume() {
 
 
         {/* ===================================================
+            RE-UPLOAD ACTION
+        =================================================== */}
+
+        {!loadingResume && existingResume && !isReuploading && (
+          <div className="applicant-upload-card">
+
+            <div className="applicant-upload-card-header">
+
+              <div className="applicant-upload-icon">
+                ↑
+              </div>
+
+              <div>
+                <h2>
+                  Update your resume
+                </h2>
+
+                <p>
+                  Keep your profile up to date by uploading
+                  your latest resume.
+                </p>
+              </div>
+
+            </div>
+
+
+            {/* Re-upload information */}
+
+            <div className="applicant-upload-note">
+
+              <span>ⓘ</span>
+
+              <div>
+                <strong>
+                  Replace your current resume
+                </strong>
+
+                <p>
+                  Your new resume will replace the current
+                  resume and its extracted profile information.
+                </p>
+              </div>
+
+            </div>
+
+
+            {/* Re-upload button */}
+
+            <button
+              type="button"
+              className="applicant-upload-submit-btn"
+              onClick={handleReupload}
+            >
+              Re-upload Resume
+            </button>
+
+
+            {/* Message */}
+
+            {message && (
+              <div
+                className={`applicant-upload-message ${
+                  messageType === "success"
+                    ? "applicant-upload-success"
+                    : "applicant-upload-error"
+                }`}
+              >
+
+                <span>
+                  {messageType === "success"
+                    ? "✓"
+                    : "!"}
+                </span>
+
+                <p>{message}</p>
+
+              </div>
+            )}
+
+          </div>
+        )}
+
+
+        {/* ===================================================
             UPLOAD CARD
         =================================================== */}
 
-        <div className="applicant-upload-card">
+        {(!existingResume || isReuploading) && (
+          <div className="applicant-upload-card">
 
-          {/* Card Header */}
+            {/* Card Header */}
 
-          <div className="applicant-upload-card-header">
+            <div className="applicant-upload-card-header">
 
-            <div className="applicant-upload-icon">
-              ↑
-            </div>
-
-            <div>
-              <h2>
-                {existingResume
-                  ? "Upload a new resume"
-                  : "Upload your resume"}
-              </h2>
-
-              <p>
-                {existingResume
-                  ? "Upload an updated version of your resume."
-                  : "Choose your latest resume from your computer."}
-              </p>
-            </div>
-
-          </div>
-
-
-          {/* Supported Formats */}
-
-          <div className="applicant-upload-formats">
-
-            <span className="upload-format-label">
-              Supported formats
-            </span>
-
-            <div className="upload-format-list">
-              <span>PDF</span>
-              <span>DOCX</span>
-              <span>TXT</span>
-            </div>
-
-          </div>
-
-
-          {/* =================================================
-              FILE SELECTION
-          ================================================= */}
-
-          {!file ? (
-
-            <div
-              className="applicant-upload-dropzone"
-              onClick={() => fileInputRef.current?.click()}
-            >
-
-              <div className="applicant-upload-file-icon">
-                📄
+              <div className="applicant-upload-icon">
+                ↑
               </div>
 
-              <h3>
-                Select your resume
-              </h3>
+              <div>
+                <h2>
+                  {existingResume
+                    ? "Replace your resume"
+                    : "Upload your resume"}
+                </h2>
 
-              <p>
-                Click to browse files from your computer
-              </p>
+                <p>
+                  {existingResume
+                    ? "Select your updated resume to replace the current one."
+                    : "Choose your latest resume from your computer."}
+                </p>
+              </div>
 
-              <button
-                type="button"
-                className="applicant-upload-select-btn"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  fileInputRef.current?.click();
-                }}
-              >
-                Choose File
-              </button>
+            </div>
 
-              <span className="upload-dropzone-hint">
-                PDF, DOCX or TXT
+
+            {/* =================================================
+                REPLACEMENT WARNING
+            ================================================= */}
+
+            {existingResume && (
+              <div className="applicant-upload-note">
+
+                <span>ⓘ</span>
+
+                <div>
+                  <strong>
+                    Your current resume will be replaced
+                  </strong>
+
+                  <p>
+                    The new resume will become your current
+                    resume and will be used for future job
+                    applications and screening.
+                  </p>
+                </div>
+
+              </div>
+            )}
+
+
+            {/* Supported Formats */}
+
+            <div className="applicant-upload-formats">
+
+              <span className="upload-format-label">
+                Supported formats
               </span>
 
-            </div>
-
-          ) : (
-
-            <div className="applicant-upload-selected">
-
-              <div className="applicant-upload-selected-icon">
-                📄
+              <div className="upload-format-list">
+                <span>PDF</span>
+                <span>DOCX</span>
+                <span>TXT</span>
               </div>
 
-              <div className="applicant-upload-file-info">
+            </div>
 
-                <strong>
-                  {file.name}
-                </strong>
 
-                <span>
-                  {(file.size / 1024).toFixed(1)} KB
+            {/* =================================================
+                FILE SELECTION
+            ================================================= */}
+
+            {!file ? (
+
+              <div
+                className="applicant-upload-dropzone"
+                onClick={() => fileInputRef.current?.click()}
+              >
+
+                <div className="applicant-upload-file-icon">
+                  📄
+                </div>
+
+                <h3>
+                  {existingResume
+                    ? "Select your new resume"
+                    : "Select your resume"}
+                </h3>
+
+                <p>
+                  Click to browse files from your computer
+                </p>
+
+                <button
+                  type="button"
+                  className="applicant-upload-select-btn"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Choose File
+                </button>
+
+                <span className="upload-dropzone-hint">
+                  PDF, DOCX or TXT
                 </span>
 
               </div>
 
+            ) : (
+
+              <div className="applicant-upload-selected">
+
+                <div className="applicant-upload-selected-icon">
+                  📄
+                </div>
+
+                <div className="applicant-upload-file-info">
+
+                  <strong>
+                    {file.name}
+                  </strong>
+
+                  <span>
+                    {(file.size / 1024).toFixed(1)} KB
+                  </span>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="applicant-upload-remove-btn"
+                  onClick={removeFile}
+                  disabled={loading}
+                >
+                  Remove
+                </button>
+
+              </div>
+
+            )}
+
+
+            {/* Hidden Input */}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.txt"
+              onChange={handleFileChange}
+              className="applicant-upload-hidden-input"
+            />
+
+
+            {/* =================================================
+                ACTION BUTTONS
+            ================================================= */}
+
+            <button
+              type="button"
+              className="applicant-upload-submit-btn"
+              onClick={handleUpload}
+              disabled={loading || !file}
+            >
+
+              {loading ? (
+                <>
+                  <span className="applicant-upload-spinner"></span>
+                  Processing Resume...
+                </>
+              ) : (
+                <>
+                  {existingResume
+                    ? "Replace & Process Resume"
+                    : "Upload & Process Resume"}
+                </>
+              )}
+
+            </button>
+
+
+            {/* Cancel Re-upload */}
+
+            {existingResume && !loading && (
               <button
                 type="button"
                 className="applicant-upload-remove-btn"
-                onClick={removeFile}
-                disabled={loading}
+                onClick={handleCancelReupload}
               >
-                Remove
+                Cancel
               </button>
-
-            </div>
-
-          )}
-
-
-          {/* Hidden Input */}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.docx,.txt"
-            onChange={handleFileChange}
-            className="applicant-upload-hidden-input"
-          />
-
-
-          {/* =================================================
-              UPLOAD BUTTON
-          ================================================= */}
-
-          <button
-            type="button"
-            className="applicant-upload-submit-btn"
-            onClick={handleUpload}
-            disabled={loading || !file}
-          >
-
-            {loading ? (
-              <>
-                <span className="applicant-upload-spinner"></span>
-                Processing Resume...
-              </>
-            ) : (
-              <>
-                Upload & Process Resume
-              </>
             )}
 
-          </button>
+
+            {/* =================================================
+                MESSAGE
+            ================================================= */}
+
+            {message && (
+              <div
+                className={`applicant-upload-message ${
+                  messageType === "success"
+                    ? "applicant-upload-success"
+                    : "applicant-upload-error"
+                }`}
+              >
+
+                <span>
+                  {messageType === "success"
+                    ? "✓"
+                    : "!"}
+                </span>
+
+                <p>{message}</p>
+
+              </div>
+            )}
 
 
-          {/* =================================================
-              MESSAGE
-          ================================================= */}
+            {/* =================================================
+                INFORMATION
+            ================================================= */}
 
-          {message && (
-            <div
-              className={`applicant-upload-message ${
-                messageType === "success"
-                  ? "applicant-upload-success"
-                  : "applicant-upload-error"
-              }`}
-            >
+            <div className="applicant-upload-note">
 
-              <span>
-                {messageType === "success"
-                  ? "✓"
-                  : "!"}
-              </span>
+              <span>ⓘ</span>
 
-              <p>{message}</p>
+              <div>
+                <strong>
+                  How your resume is used
+                </strong>
 
-            </div>
-          )}
+                <p>
+                  Your resume will be processed by the screening
+                  system and used to match your profile with
+                  available job opportunities.
+                </p>
+              </div>
 
-
-          {/* =================================================
-              INFORMATION
-          ================================================= */}
-
-          <div className="applicant-upload-note">
-
-            <span>ⓘ</span>
-
-            <div>
-              <strong>
-                How your resume is used
-              </strong>
-
-              <p>
-                Your resume will be processed by the screening
-                system and used to match your profile with
-                available job opportunities.
-              </p>
             </div>
 
           </div>
-
-        </div>
+        )}
 
 
         {/* ===================================================
@@ -602,4 +763,3 @@ function UploadResume() {
 }
 
 export default UploadResume;
-

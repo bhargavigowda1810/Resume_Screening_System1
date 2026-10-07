@@ -19,7 +19,7 @@ function Login() {
     setError("");
 
     if (!loginType) {
-      setError("Please select Applicant or Recruiter.");
+      setError("Please select Applicant, Recruiter, or Administrator.");
       return;
     }
 
@@ -36,6 +36,7 @@ function Login() {
         loginType === "APPLICANT" &&
         response.role !== "APPLICANT"
       ) {
+        localStorage.removeItem("token");
         setError("This account is not an Applicant account.");
         return;
       }
@@ -44,24 +45,74 @@ function Login() {
         loginType === "RECRUITER" &&
         response.role !== "RECRUITER"
       ) {
+        localStorage.removeItem("token");
         setError("This account is not a Recruiter account.");
         return;
       }
 
-      // Save logged-in user
-      localStorage.setItem("user", JSON.stringify(response));
+      if (
+        loginType === "ADMIN" &&
+        response.role !== "ADMIN"
+      ) {
+        localStorage.removeItem("token");
+        setError("This account is not an Administrator account.");
+        return;
+      }
+
+      // Store JWT authentication information
+      if (!response.token) {
+        setError("Login failed. Authentication token was not received.");
+        return;
+      }
+
+      localStorage.setItem(
+        "token",
+        response.token
+      );
+
+      localStorage.setItem(
+        "userUuid",
+        response.userUuid
+      );
+
+      localStorage.setItem(
+        "role",
+        response.role
+      );
+
+      localStorage.setItem(
+        "name",
+        response.name
+      );
+
+      localStorage.setItem(
+        "email",
+        response.email
+      );
 
       // Redirect based on role
       if (response.role === "APPLICANT") {
         navigate("/applicant");
       } else if (response.role === "RECRUITER") {
         navigate("/recruiter");
+      } else if (response.role === "ADMIN") {
+        navigate("/admin");
       } else {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userUuid");
+        localStorage.removeItem("role");
+        localStorage.removeItem("name");
+        localStorage.removeItem("email");
+
         setError("Unknown user role.");
       }
     } catch (error) {
       console.error("Login failed:", error);
-      setError("Invalid email or password.");
+
+      setError(
+        error?.message ||
+        "Unable to connect to the server. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -75,77 +126,47 @@ function Login() {
     setShowPassword(false);
   };
 
+  const getRoleIcon = () => {
+    if (loginType === "APPLICANT") {
+      return "👤";
+    }
+
+    if (loginType === "RECRUITER") {
+      return "💼";
+    }
+
+    if (loginType === "ADMIN") {
+      return "🛡️";
+    }
+
+    return "";
+  };
+
+  const getRoleName = () => {
+    if (loginType === "APPLICANT") {
+      return "Applicant";
+    }
+
+    if (loginType === "RECRUITER") {
+      return "Recruiter";
+    }
+
+    if (loginType === "ADMIN") {
+      return "Administrator";
+    }
+
+    return "";
+  };
+
   return (
     <div className="login-page">
 
-      {/* Left branding section */}
-      <section className="login-brand">
-
-        <div className="login-brand-overlay"></div>
-
-        <div className="login-brand-content">
-
-          <div className="login-logo">
-            RS
-          </div>
-
-          <div className="login-brand-label">
-            RESUME SCREENING SYSTEM
-          </div>
-
-          <h1>
-            Find the right
-            <br />
-            <span>Job and candidate faster.</span>
-          </h1>
-
-          <p className="login-brand-description">
-            A smarter way to screen resumes, discover qualified
-            candidates, and simplify the recruitment process.
-          </p>
-
-          <div className="login-features">
-
-            <div className="login-feature">
-              <div className="login-feature-icon">✓</div>
-              <div>
-                <strong>AI-powered screening</strong>
-                <span>Analyze resumes intelligently</span>
-              </div>
-            </div>
-
-            <div className="login-feature">
-              <div className="login-feature-icon">✓</div>
-              <div>
-                <strong>Smart candidate ranking</strong>
-                <span>Find the most relevant candidates</span>
-              </div>
-            </div>
-
-            <div className="login-feature">
-              <div className="login-feature-icon">✓</div>
-              <div>
-                <strong>Faster hiring decisions</strong>
-                <span>Reduce manual screening effort</span>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
-        <div className="login-brand-footer">
-          Resume Screening & Ranking System
-        </div>
-
-      </section>
-
-      {/* Login section */}
+      {/* Centered login section */}
       <section className="login-panel">
 
         <div className="login-card">
 
-          {/* Mobile logo */}
+          {/* Logo */}
           <div className="login-mobile-logo">
             RS
           </div>
@@ -153,7 +174,7 @@ function Login() {
           <div className="login-heading">
 
             <span className="login-eyebrow">
-              ACCOUNT ACCESS
+              RESUME SCREENING SYSTEM
             </span>
 
             <h2>
@@ -176,6 +197,7 @@ function Login() {
 
               <div className="login-role-grid">
 
+                {/* Applicant */}
                 <button
                   type="button"
                   className="login-role-card"
@@ -195,6 +217,7 @@ function Login() {
                   </div>
                 </button>
 
+                {/* Recruiter */}
                 <button
                   type="button"
                   className="login-role-card"
@@ -207,6 +230,26 @@ function Login() {
                   <div className="login-role-content">
                     <strong>Recruiter</strong>
                     <span>Manage jobs and candidates</span>
+                  </div>
+
+                  <div className="login-role-arrow">
+                    →
+                  </div>
+                </button>
+
+                {/* Administrator */}
+                <button
+                  type="button"
+                  className="login-role-card"
+                  onClick={() => setLoginType("ADMIN")}
+                >
+                  <div className="login-role-icon admin-icon">
+                    🛡️
+                  </div>
+
+                  <div className="login-role-content">
+                    <strong>Administrator</strong>
+                    <span>Create and manage recruiter accounts</span>
                   </div>
 
                   <div className="login-role-arrow">
@@ -229,15 +272,14 @@ function Login() {
                 <div className="login-selected-role-info">
 
                   <div className="login-selected-role-icon">
-                    {loginType === "APPLICANT" ? "👤" : "💼"}
+                    {getRoleIcon()}
                   </div>
 
                   <div>
                     <span>Signing in as</span>
+
                     <strong>
-                      {loginType === "APPLICANT"
-                        ? "Applicant"
-                        : "Recruiter"}
+                      {getRoleName()}
                     </strong>
                   </div>
 
@@ -298,7 +340,11 @@ function Login() {
 
                     <input
                       id="login-password"
-                      type={showPassword ? "text" : "password"}
+                      type={
+                        showPassword
+                          ? "text"
+                          : "password"
+                      }
                       placeholder="Enter your password"
                       value={password}
                       onChange={(event) =>
@@ -339,11 +385,13 @@ function Login() {
                 {/* Error */}
                 {error && (
                   <div className="login-error">
+
                     <span className="login-error-icon">
                       !
                     </span>
 
                     <span>{error}</span>
+
                   </div>
                 )}
 
@@ -383,11 +431,6 @@ function Login() {
             </Link>
 
           </div>
-
-          <div className="login-security-note">
-            Your account information is securely protected.
-          </div>
-
         </div>
 
       </section>

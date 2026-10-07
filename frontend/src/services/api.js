@@ -1,113 +1,166 @@
 const API_BASE_URL = "http://localhost:8081/api";
 
-export const api = {
-  get: async (endpoint) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`);
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
 
-    const contentType = response.headers.get("content-type") || "";
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+const handleResponse = async (response, endpoint, method) => {
+  const contentType =
+    response.headers.get("content-type") || "";
+
+  if (!response.ok) {
+    const errorMessage = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
+
+    throw new Error(
+      typeof errorMessage === "string"
+        ? errorMessage
+        : errorMessage.message ||
+            `${method} ${endpoint} failed`
+    );
+  }
+
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  return response.text();
+};
+
+export const api = {
+  // =========================================================
+  // GET
+  // =========================================================
+
+  get: async (endpoint) => {
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        method: "GET",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      }
+    );
+
+    return handleResponse(
+      response,
+      endpoint,
+      "GET"
+    );
+  },
+
+  // =========================================================
+  // DOWNLOAD FILE
+  // =========================================================
+
+  download: async (endpoint) => {
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        method: "GET",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      }
+    );
 
     if (!response.ok) {
-      const errorMessage = contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
+      const contentType =
+        response.headers.get("content-type") || "";
+
+      const errorMessage =
+        contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
 
       throw new Error(
         typeof errorMessage === "string"
           ? errorMessage
-          : errorMessage.message || `GET ${endpoint} failed`
+          : errorMessage.message ||
+              "Download failed"
       );
     }
 
-    if (contentType.includes("application/json")) {
-      return response.json();
-    }
-
-    return response.text();
+    return response.blob();
   },
+
+  // =========================================================
+  // POST
+  // =========================================================
 
   post: async (endpoint, data) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      }
+    );
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!response.ok) {
-      const errorMessage = contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
-
-      throw new Error(
-        typeof errorMessage === "string"
-          ? errorMessage
-          : errorMessage.message || `POST ${endpoint} failed`
-      );
-    }
-
-    if (contentType.includes("application/json")) {
-      return response.json();
-    }
-
-    return response.text();
+    return handleResponse(
+      response,
+      endpoint,
+      "POST"
+    );
   },
+
+  // =========================================================
+  // PUT
+  // =========================================================
 
   put: async (endpoint, data) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      }
+    );
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!response.ok) {
-      const errorMessage = contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
-
-      throw new Error(
-        typeof errorMessage === "string"
-          ? errorMessage
-          : errorMessage.message || `PUT ${endpoint} failed`
-      );
-    }
-
-    if (contentType.includes("application/json")) {
-      return response.json();
-    }
-
-    return response.text();
+    return handleResponse(
+      response,
+      endpoint,
+      "PUT"
+    );
   },
 
+  // =========================================================
+  // DELETE
+  // =========================================================
+
   delete: async (endpoint) => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        method: "DELETE",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      }
+    );
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!response.ok) {
-      const errorMessage = contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
-
-      throw new Error(
-        typeof errorMessage === "string"
-          ? errorMessage
-          : errorMessage.message || `DELETE ${endpoint} failed`
-      );
-    }
-
-    if (contentType.includes("application/json")) {
-      return response.json();
-    }
-
-    return response.text();
+    return handleResponse(
+      response,
+      endpoint,
+      "DELETE"
+    );
   },
 };
