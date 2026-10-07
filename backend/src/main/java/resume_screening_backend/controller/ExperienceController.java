@@ -29,33 +29,32 @@ public ExperienceController(
 }
 
     // Add experience to a resume
-    @PostMapping
-public ResponseEntity<Experience> saveExperience(
+   @PostMapping
+public ResponseEntity<?> saveExperience(
         @RequestBody Experience experience,
         Authentication authentication) {
 
-    Optional<User> user =
-        userService.findByEmail(authentication.getName());
-
-if (user.isEmpty()) {
-    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-}
-
-Long userId = user.get().getUserId();
-
-    if (!experienceService.isResumeOwnedByUser(
-            experience.getResumeId(), userId)) {
-
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-
+    try {
         Experience savedExperience =
-                experienceService.saveExperience(experience);
+                experienceService.createExperience(
+                        experience,
+                        authentication.getName()
+                );
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(savedExperience);
+
+    } catch (IllegalArgumentException e) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(java.util.Map.of(
+                        "message",
+                        e.getMessage()
+                ));
     }
+}
 
     // Get experience by ID
    @GetMapping("/{experienceId}")
@@ -120,38 +119,31 @@ Long userId = user.get().getUserId();
 
     // Update experience
    @PutMapping("/{experienceId}")
-public ResponseEntity<Experience> updateExperience(
+public ResponseEntity<?> updateExperience(
         @PathVariable Long experienceId,
         @RequestBody Experience experience,
         Authentication authentication) {
 
-   Optional<User> user =
-        userService.findByEmail(authentication.getName());
+    try {
+        Experience updatedExperience =
+                experienceService.updateExperience(
+                        experienceId,
+                        experience,
+                        authentication.getName()
+                );
 
-if (user.isEmpty()) {
-    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return ResponseEntity.ok(updatedExperience);
+
+    } catch (IllegalArgumentException e) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(java.util.Map.of(
+                        "message",
+                        e.getMessage()
+                ));
+    }
 }
-
-Long userId = user.get().getUserId();
-
-    if (!experienceService.isOwnedByUser(experienceId, userId)) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-
-        Optional<Experience> existingExperience =
-                experienceService.findById(experienceId);
-
-        if (existingExperience.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        experience.setExperienceId(experienceId);
-
-        return ResponseEntity.ok(
-                experienceService.updateExperience(experience)
-        );
-    }
-
     // Delete experience
     @DeleteMapping("/{experienceId}")
 public ResponseEntity<Void> deleteExperience(
