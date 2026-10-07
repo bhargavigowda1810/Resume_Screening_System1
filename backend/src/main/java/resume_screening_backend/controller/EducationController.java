@@ -8,6 +8,8 @@ import resume_screening_backend.service.EducationService;
 import org.springframework.security.core.Authentication;
 import resume_screening_backend.entity.User;
 import resume_screening_backend.service.UserService;
+
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 
@@ -118,39 +120,76 @@ Long userId = user.get().getUserId();
 }
 
     // Update education
-    @PutMapping("/{educationId}")
-public ResponseEntity<Education> updateEducation(
+  @PutMapping("/{educationId}")
+public ResponseEntity<?> updateEducation(
         @PathVariable Long educationId,
         @RequestBody Education education,
         Authentication authentication) {
 
-    Optional<User> user =
-        userService.findByEmail(authentication.getName());
+    if (authentication == null ||
+            !authentication.isAuthenticated()) {
 
-if (user.isEmpty()) {
-    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-}
-
-Long userId = user.get().getUserId();
-
-    if (!educationService.isOwnedByUser(educationId, userId)) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(
+                        Map.of(
+                                "message",
+                                "User is not authenticated."
+                        )
+                );
     }
 
-        Optional<Education> existingEducation =
-                educationService.findById(educationId);
+    try {
 
-        if (existingEducation.isEmpty()) {
-            return ResponseEntity.notFound().build();
+        String email =
+                authentication.getName();
+
+        Optional<Education> updatedEducation =
+                educationService.updateEducation(
+                        educationId,
+                        education,
+                        email
+                );
+
+        if (updatedEducation.isEmpty()) {
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(
+                            Map.of(
+                                    "message",
+                                    "Education record was not found."
+                            )
+                    );
         }
 
-        education.setEducationId(educationId);
-
         return ResponseEntity.ok(
-                educationService.updateEducation(education)
+                updatedEducation.get()
         );
-    }
 
+    } catch (IllegalArgumentException e) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(
+                        Map.of(
+                                "message",
+                                e.getMessage()
+                        )
+                );
+
+    } catch (Exception e) {
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(
+                        Map.of(
+                                "message",
+                                "Unable to update education."
+                        )
+                );
+    }
+}
     // Delete education
     @DeleteMapping("/{educationId}")
 public ResponseEntity<Void> deleteEducation(
