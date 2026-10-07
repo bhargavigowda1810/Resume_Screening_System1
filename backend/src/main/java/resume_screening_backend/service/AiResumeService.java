@@ -326,17 +326,31 @@ public class AiResumeService {
 
                 if (isValidIsoDate(startDate)) {
 
-                    experience.setStartDate(
-                            LocalDate.parse(startDate)
-                    );
-                }
+    LocalDate parsedStartDate =
+            LocalDate.parse(startDate);
 
-                if (isValidIsoDate(endDate)) {
+    experience.setStartDate(
+            parsedStartDate
+    );
 
-                    experience.setEndDate(
-                            LocalDate.parse(endDate)
-                    );
-                }
+    experience.setOriginalStartDate(
+            parsedStartDate
+    );
+}
+
+if (isValidIsoDate(endDate)) {
+
+    LocalDate parsedEndDate =
+            LocalDate.parse(endDate);
+
+    experience.setEndDate(
+            parsedEndDate
+    );
+
+    experience.setOriginalEndDate(
+            parsedEndDate
+    );
+}
 
                 experience.setDescription(
                         getNullableText(
