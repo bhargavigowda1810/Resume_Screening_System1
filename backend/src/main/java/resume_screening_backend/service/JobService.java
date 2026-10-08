@@ -11,6 +11,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import resume_screening_backend.repository.UserRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import resume_screening_backend.entity.Job;
 import resume_screening_backend.entity.JobEmbedding;
@@ -26,6 +29,7 @@ public class JobService {
 
     private final JobRepository jobRepository;
     private final JobEmbeddingRepository jobEmbeddingRepository;
+    private final UserRepository userRepository;
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -34,14 +38,15 @@ public class JobService {
     private String aiServiceUrl;
 
     public JobService(
-            JobRepository jobRepository,
-            JobEmbeddingRepository jobEmbeddingRepository) {
+        JobRepository jobRepository,
+        JobEmbeddingRepository jobEmbeddingRepository,
+        UserRepository userRepository) {
 
-        this.jobRepository = jobRepository;
-        this.jobEmbeddingRepository = jobEmbeddingRepository;
-
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+    this.jobRepository = jobRepository;
+    this.jobEmbeddingRepository = jobEmbeddingRepository;
+    this.userRepository = userRepository;
+    this.restTemplate = new RestTemplate();
+this.objectMapper = new ObjectMapper();
     }
 
     // =========================================================
@@ -53,7 +58,15 @@ public class JobService {
         // -----------------------------------------------------
         // 1. Save job first
         // -----------------------------------------------------
+Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
+String email = authentication.getName();
+
+Long recruiterId = userRepository.findByEmail(email)
+        .orElseThrow(() -> new RuntimeException("Recruiter not found"))
+        .getUserId();
+
+job.setRecruiterId(recruiterId);
         Job savedJob = jobRepository.save(job);
 
         // -----------------------------------------------------

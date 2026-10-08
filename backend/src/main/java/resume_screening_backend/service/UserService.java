@@ -118,8 +118,8 @@ public User createRecruiter(
     recruiter.setRole("RECRUITER");
     recruiter.setCreatedAt(LocalDateTime.now());
 
-    // Recruiter must verify email before login.
-    recruiter.setEmailVerified(false);
+    // Recruiter email was verified before account creation.
+    recruiter.setEmailVerified(true);
 
     User savedRecruiter =
             userRepository.save(recruiter);
@@ -142,11 +142,7 @@ public User createRecruiter(
     recruiterProfileRepository.save(
             recruiterProfile
     );
-
-    // Send recruiter verification OTP.
-    generateRecruiterVerificationOtp(email);
-
-    return savedRecruiter;
+return savedRecruiter;
 }  
 
 
@@ -158,17 +154,16 @@ public User createRecruiter(
 public void generateRecruiterVerificationOtp(
         String email) {
 
-    User recruiter =
-            userRepository.findByEmail(email)
-                    .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Recruiter account not found"
-                            )
-                    );
+    if (email == null || email.isBlank()) {
+        throw new RuntimeException("Email is required.");
+    }
 
-    if (!"RECRUITER".equals(recruiter.getRole())) {
+    email = email.trim();
+
+    // Do not allow verification for an already registered email.
+    if (userRepository.findByEmail(email).isPresent()) {
         throw new RuntimeException(
-                "This account is not a recruiter account."
+                "An account with this email already exists."
         );
     }
 
@@ -206,26 +201,18 @@ public void verifyRecruiterVerificationOtp(
         String email,
         String otp) {
 
-    User recruiter =
-            userRepository.findByEmail(email)
-                    .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Recruiter account not found"
-                            )
-                    );
-
-    if (!"RECRUITER".equals(recruiter.getRole())) {
-        throw new RuntimeException(
-                "This account is not a recruiter account."
-        );
+    if (email == null || email.isBlank()) {
+        throw new RuntimeException("Email is required.");
     }
 
-    if (recruiter.isEmailVerified()) {
-        throw new RuntimeException(
-                "Recruiter email is already verified."
-        );
+    if (otp == null || otp.isBlank()) {
+        throw new RuntimeException("OTP is required.");
     }
 
+    email = email.trim();
+    otp = otp.trim();
+
+    // Find the OTP generated for this email.
     EmailOtp emailOtp =
             emailOtpRepository
                     .findByEmail(email)
@@ -235,6 +222,7 @@ public void verifyRecruiterVerificationOtp(
                             )
                     );
 
+    // Check whether the OTP has expired.
     if (emailOtp.getExpiryDate()
             .isBefore(LocalDateTime.now())) {
 
@@ -245,17 +233,14 @@ public void verifyRecruiterVerificationOtp(
         );
     }
 
+    // Check whether the submitted OTP is correct.
     if (!emailOtp.getOtp().equals(otp)) {
         throw new RuntimeException(
                 "Invalid OTP."
         );
     }
 
-    // OTP is valid — verify the recruiter's email.
-    recruiter.setEmailVerified(true);
-    userRepository.save(recruiter);
-
-    // Prevent OTP reuse.
+    // OTP is valid. Delete it so it cannot be reused.
     emailOtpRepository.delete(emailOtp);
 }
 
@@ -652,4 +637,8 @@ public String verifyPasswordResetOtp(
         return userRepository.findAll();
     }
 }
+
+
+
+
 

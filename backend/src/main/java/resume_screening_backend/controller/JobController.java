@@ -5,6 +5,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import resume_screening_backend.service.JobService;
+import org.springframework.security.core.Authentication;
+import resume_screening_backend.entity.User;
+import resume_screening_backend.repository.UserRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,10 +17,15 @@ import java.util.Optional;
 public class JobController {
 
     private final JobService jobService;
+private final UserRepository userRepository;
 
-    public JobController(JobService jobService) {
-        this.jobService = jobService;
-    }
+public JobController(
+        JobService jobService,
+        UserRepository userRepository) {
+
+    this.jobService = jobService;
+    this.userRepository = userRepository;
+}
 
     // Create a new job
     @PostMapping
@@ -28,7 +36,20 @@ public class JobController {
                 .status(HttpStatus.CREATED)
                 .body(createdJob);
     }
+@GetMapping("/me")
+public ResponseEntity<List<Job>> getMyJobs(
+        Authentication authentication) {
 
+    String email = authentication.getName();
+
+    User user = userRepository.findByEmail(email)
+            .orElseThrow(() ->
+                    new RuntimeException("User not found"));
+
+    return ResponseEntity.ok(
+            jobService.findByRecruiterId(user.getUserId())
+    );
+}
     // Get job by ID
     @GetMapping("/{jobId}")
     public ResponseEntity<Job> getJobById(

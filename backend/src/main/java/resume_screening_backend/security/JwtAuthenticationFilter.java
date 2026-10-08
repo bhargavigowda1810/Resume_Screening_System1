@@ -42,6 +42,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authorizationHeader =
                 request.getHeader("Authorization");
 
+                System.out.println("JWT FILTER HIT: " + request.getMethod() + " " + request.getRequestURI());
+
         if (authorizationHeader == null
                 || !authorizationHeader.startsWith("Bearer ")) {
 
@@ -72,6 +74,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     if (jwtService.isTokenValid(token, user)) {
 
                         String role = user.getRole();
+System.out.println("JWT USER: " + user.getEmail() + " | ROLE: " + role);
+
 
                         SimpleGrantedAuthority authority =
                                 new SimpleGrantedAuthority(

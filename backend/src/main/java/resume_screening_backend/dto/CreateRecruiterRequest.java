@@ -6,6 +6,7 @@ public class CreateRecruiterRequest {
     private String name;
     private String email;
     private String password;
+    private String emailVerificationToken;
 
     // Recruiter personal/professional details
     private String phone;
@@ -47,7 +48,15 @@ public class CreateRecruiterRequest {
         return password;
     }
 
-    public void setPassword(String password) {
+    public String getEmailVerificationToken() {
+        return emailVerificationToken;
+    }
+
+    public void setEmailVerificationToken(String emailVerificationToken) {
+        this.emailVerificationToken = emailVerificationToken;
+    }
+
+public void setPassword(String password) {
         this.password = password;
     }
 

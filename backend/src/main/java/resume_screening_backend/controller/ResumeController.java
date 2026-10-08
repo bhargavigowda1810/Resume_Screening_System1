@@ -69,7 +69,27 @@ Long userId = user.get().getUserId();
                 .status(HttpStatus.CREATED)
                 .body(savedResume);
     }
+// =========================================================
+// GET MY RESUME
+// =========================================================
 
+@GetMapping("/me")
+public ResponseEntity<List<Resume>> getMyResumes(
+        Authentication authentication) {
+
+    Optional<User> user =
+            userService.findByEmail(authentication.getName());
+
+    if (user.isEmpty()) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    Long userId = user.get().getUserId();
+
+    return ResponseEntity.ok(
+            resumeService.findByApplicantId(userId)
+    );
+}
     // =========================================================
     // GET RESUME BY ID
     // =========================================================
