@@ -23,6 +23,7 @@ import resume_screening_backend.entity.Resume;
 import resume_screening_backend.entity.ResumeEmbedding;
 import resume_screening_backend.entity.Skill;
 import resume_screening_backend.repository.ResumeEmbeddingRepository;
+import resume_screening_backend.entity.ResumeProfile;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,32 +40,38 @@ public class AiResumeService {
     private final ObjectMapper objectMapper;
 
     private final ResumeService resumeService;
-    private final EducationService educationService;
-    private final ExperienceService experienceService;
-    private final SkillService skillService;
+private final EducationService educationService;
+private final ExperienceService experienceService;
+private final ResumeProfileService resumeProfileService;
+private final SkillService skillService;
     private final ResumeSkillService resumeSkillService;
     private final ResumeEmbeddingRepository resumeEmbeddingRepository;
+    private final ResumeTextSectionExtractor resumeTextSectionExtractor;
 
     @Value("${ai.service.url:http://localhost:8000}")
     private String aiServiceUrl;
 
     public AiResumeService(
-            ResumeService resumeService,
-            EducationService educationService,
-            ExperienceService experienceService,
-            SkillService skillService,
-            ResumeSkillService resumeSkillService,
-            ResumeEmbeddingRepository resumeEmbeddingRepository) {
+        ResumeService resumeService,
+        EducationService educationService,
+        ExperienceService experienceService,
+        ResumeProfileService resumeProfileService,
+        SkillService skillService,
+        ResumeSkillService resumeSkillService,
+        ResumeEmbeddingRepository resumeEmbeddingRepository,
+        ResumeTextSectionExtractor resumeTextSectionExtractor) {
 
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
 
         this.resumeService = resumeService;
-        this.educationService = educationService;
-        this.experienceService = experienceService;
-        this.skillService = skillService;
+this.educationService = educationService;
+this.experienceService = experienceService;
+this.resumeProfileService = resumeProfileService;
+this.skillService = skillService;
         this.resumeSkillService = resumeSkillService;
         this.resumeEmbeddingRepository = resumeEmbeddingRepository;
+        this.resumeTextSectionExtractor = resumeTextSectionExtractor;
     }
 
     @Transactional
@@ -115,6 +122,11 @@ public class AiResumeService {
         }
 
         String aiResponse = response.getBody();
+        System.out.println("========== AI RESUME RESPONSE ==========");
+System.out.println(aiResponse);
+System.out.println("========================================");
+
+
 
         if (aiResponse == null ||
                 aiResponse.isBlank()) {
@@ -133,6 +145,25 @@ public class AiResumeService {
 
         JsonNode parsedResume =
                 root.path("parsedResume");
+
+               System.out.println("=== RESUME EXTRACTION DEBUG ===");
+System.out.println("Parsed resume: " + parsedResume.toPrettyString());
+System.out.println("Extracted text: " + root.path("extractedText").asText(""));
+System.out.println("Projects: " + parsedResume.path("projects"));
+System.out.println("Certifications: " + parsedResume.path("certifications"));
+System.out.println("Achievements: " + parsedResume.path("achievements"));
+System.out.println("Education: " + parsedResume.path("education"));
+System.out.println("Experience: " + parsedResume.path("experience"));
+System.out.println("================================");
+
+System.out.println("========== PARSED RESUME SECTIONS ==========");
+System.out.println("PROJECTS: " + parsedResume.path("projects").toPrettyString());
+System.out.println("CERTIFICATIONS: " + parsedResume.path("certifications").toPrettyString());
+System.out.println("ACHIEVEMENTS: " + parsedResume.path("achievements").toPrettyString());
+System.out.println("EXPERIENCE: " + parsedResume.path("experience").toPrettyString());
+System.out.println("EDUCATION: " + parsedResume.path("education").toPrettyString());
+System.out.println("=============================================");
+
 
         if (parsedResume.isMissingNode() ||
                 parsedResume.isNull()) {
@@ -210,160 +241,224 @@ public class AiResumeService {
         Long resumeId =
                 savedResume.getResumeId();
 
+
         // =========================================================
-        // 5. SAVE EDUCATION
+        // SAVE EDUCATION
         // =========================================================
 
-        JsonNode educationArray =
-                parsedResume.path("education");
+        JsonNode educationArray = parsedResume.path("education");
+
+        if (!educationArray.isArray() || educationArray.isEmpty()) {
+            educationArray = resumeTextSectionExtractor.extractEducation(
+                    root.path("extractedText").asText("")
+            );
+        }
 
         if (educationArray.isArray()) {
+            for (JsonNode educationNode : educationArray) {
 
-            for (JsonNode educationNode :
-                    educationArray) {
-
-                Education education =
-                        new Education();
-
+                Education education = new Education();
                 education.setResumeId(resumeId);
 
                 education.setDegree(
-                        getNullableText(
-                                educationNode,
-                                "degree"
-                        )
+                        getNullableText(educationNode, "degree")
                 );
 
                 education.setInstitution(
-                        getNullableText(
-                                educationNode,
-                                "institution"
-                        )
+                        getNullableText(educationNode, "institution")
                 );
 
                 education.setFieldOfStudy(
-                        getNullableText(
-                                educationNode,
-                                "fieldOfStudy"
-                        )
+                        getNullableText(educationNode, "fieldOfStudy")
                 );
 
-                if (educationNode.has("startYear") &&
-                        !educationNode.get("startYear").isNull()) {
-
+                if (educationNode.hasNonNull("startYear")
+                        && educationNode.path("startYear").canConvertToInt()) {
                     education.setStartYear(
-                            educationNode
-                                    .get("startYear")
-                                    .asInt()
+                            educationNode.path("startYear").asInt()
                     );
                 }
 
-                if (educationNode.has("endYear") &&
-                        !educationNode.get("endYear").isNull()) {
-
+                if (educationNode.hasNonNull("endYear")
+                        && educationNode.path("endYear").canConvertToInt()) {
                     education.setEndYear(
-                            educationNode
-                                    .get("endYear")
-                                    .asInt()
+                            educationNode.path("endYear").asInt()
                     );
                 }
 
                 education.setGrade(
-                        getNullableText(
-                                educationNode,
-                                "grade"
-                        )
+                        getNullableText(educationNode, "grade")
                 );
 
-                educationService.saveEducation(
-                        education
-                );
+                // Avoid storing completely empty education entries.
+                if (education.getDegree() == null
+                        && education.getInstitution() == null
+                        && education.getFieldOfStudy() == null) {
+                    continue;
+                }
+
+                educationService.saveEducation(education);
             }
         }
 
         // =========================================================
-        // 6. SAVE EXPERIENCE
+        // CREATE RESUME PROFILE FROM THE UPLOADED RESUME
         // =========================================================
 
-        JsonNode experienceArray =
-                parsedResume.path("experience");
+        ResumeProfile resumeProfile = new ResumeProfile();
+        resumeProfile.setResumeId(resumeId);
 
-        if (experienceArray.isArray()) {
+       
+String extractedText = root.path("extractedText").asText("");
+System.out.println("=== RESUME CONTACT TEXT DEBUG ===");
+System.out.println(extractedText.substring(
+        0, Math.min(extractedText.length(), 1200)
+));
+System.out.println("=================================");
 
-            for (JsonNode experienceNode :
-                    experienceArray) {
+String phone = getNullableText(parsedResume, "phone");
+if (phone == null) {
+    phone = resumeTextSectionExtractor.extractPhone(extractedText);
+}
+resumeProfile.setPhone(phone);
 
-                Experience experience =
-                        new Experience();
+String linkedin = getNullableText(parsedResume, "linkedin");
+if (linkedin == null) {
+    linkedin = resumeTextSectionExtractor.extractLinkedin(extractedText);
+}
+resumeProfile.setLinkedin(linkedin);
 
-                experience.setResumeId(resumeId);
+String github = getNullableText(parsedResume, "github");
+if (github == null) {
+    github = resumeTextSectionExtractor.extractGithub(extractedText);
+}
+resumeProfile.setGithub(github);
 
-                experience.setCompany(
-                        getNullableText(
-                                experienceNode,
-                                "company"
-                        )
-                );
+String portfolio = getNullableText(parsedResume, "portfolio");
+if (portfolio == null) {
+    portfolio = resumeTextSectionExtractor.extractPortfolio(extractedText);
+}
+resumeProfile.setPortfolio(portfolio);
 
-                experience.setJobTitle(
-                        getNullableText(
-                                experienceNode,
-                                "jobTitle"
-                        )
-                );
+        // Projects: use structured AI data first, then text fallback.
 
-                String startDate =
-                        getNullableText(
-                                experienceNode,
-                                "startDate"
-                        );
+JsonNode projectsArray =
+        resumeTextSectionExtractor.extractProjects(extractedText);
+        System.out.println("=== JAVA PROJECT EXTRACTOR DEBUG ===");
+System.out.println("Extracted projects: " + projectsArray.toPrettyString());
+System.out.println("Number of projects: " + projectsArray.size());
+System.out.println("====================================");
 
-                String endDate =
-                        getNullableText(
-                                experienceNode,
-                                "endDate"
-                        );
+if (!projectsArray.isArray() || projectsArray.isEmpty()) {
+    projectsArray = parsedResume.path("projects");
+}
 
-                if (isValidIsoDate(startDate)) {
+if (projectsArray.isArray()) {
+    resumeProfile.setProjects(projectsArray);
+}
 
-    LocalDate parsedStartDate =
-            LocalDate.parse(startDate);
 
-    experience.setStartDate(
-            parsedStartDate
-    );
+if (projectsArray.isArray()) {
+    resumeProfile.setProjects(projectsArray);
+}
 
-    experience.setOriginalStartDate(
-            parsedStartDate
+// Certifications: use structured AI data first, then text fallback.
+JsonNode certificationsArray = parsedResume.path("certifications");
+
+if (!certificationsArray.isArray() || certificationsArray.isEmpty()) {
+    certificationsArray = resumeTextSectionExtractor.extractCertifications(
+            root.path("extractedText").asText("")
     );
 }
 
-if (isValidIsoDate(endDate)) {
+if (certificationsArray.isArray()) {
+    resumeProfile.setCertifications(certificationsArray);
+}
 
-    LocalDate parsedEndDate =
-            LocalDate.parse(endDate);
+// Achievements: use structured AI data first, then text fallback.
+JsonNode achievementsArray = parsedResume.path("achievements");
 
-    experience.setEndDate(
-            parsedEndDate
-    );
-
-    experience.setOriginalEndDate(
-            parsedEndDate
+if (!achievementsArray.isArray() || achievementsArray.isEmpty()) {
+    achievementsArray = resumeTextSectionExtractor.extractAchievements(
+            root.path("extractedText").asText("")
     );
 }
 
-                experience.setDescription(
-                        getNullableText(
-                                experienceNode,
-                                "description"
-                        )
-                );
+if (achievementsArray.isArray()) {
+    resumeProfile.setAchievements(achievementsArray);
+}
+System.out.println("=== CONTACT INFO DEBUG ===");
+System.out.println("AI phone: " + getNullableText(parsedResume, "phone"));
+System.out.println("Final phone: " + resumeProfile.getPhone());
+System.out.println("Final LinkedIn: " + resumeProfile.getLinkedin());
+System.out.println("Final GitHub: " + resumeProfile.getGithub());
+System.out.println("Final portfolio: " + resumeProfile.getPortfolio());
+System.out.println("==========================");
+        resumeProfileService.saveResumeProfile(resumeProfile);
 
-                experienceService.saveExperience(
-                        experience
-                );
-            }
+
+
+// =========================================================
+// 6. SAVE EXPERIENCE
+// =========================================================
+
+JsonNode experienceArray = parsedResume.path("experience");
+
+// Fallback to extracted resume text if AI parsing returns no experience.
+if (!experienceArray.isArray() || experienceArray.isEmpty()) {
+    experienceArray = resumeTextSectionExtractor.extractExperience(
+            root.path("extractedText").asText("")
+    );
+}
+
+if (experienceArray.isArray()) {
+    for (JsonNode experienceNode : experienceArray) {
+
+        String company = getNullableText(experienceNode, "company");
+        String jobTitle = getNullableText(experienceNode, "jobTitle");
+
+        // Save only records with both company and job title.
+        if (company == null || jobTitle == null) {
+            continue;
         }
+
+        Experience experience = new Experience();
+        experience.setResumeId(resumeId);
+        experience.setCompany(company);
+        experience.setJobTitle(jobTitle);
+
+        String startDate = getNullableText(experienceNode, "startDate");
+        String endDate = getNullableText(experienceNode, "endDate");
+
+        // Use dates extracted from the resume text if AI dates are missing.
+        if (startDate == null) {
+            startDate = getNullableText(experienceNode, "startDateText");
+        }
+
+        if (endDate == null) {
+            endDate = getNullableText(experienceNode, "endDateText");
+        }
+
+        LocalDate parsedStartDate = parseExperienceDate(startDate, false);
+        LocalDate parsedEndDate = parseExperienceDate(endDate, true);
+
+        if (parsedStartDate != null) {
+            experience.setStartDate(parsedStartDate);
+            experience.setOriginalStartDate(parsedStartDate);
+        }
+
+        if (parsedEndDate != null) {
+            experience.setEndDate(parsedEndDate);
+            experience.setOriginalEndDate(parsedEndDate);
+        }
+
+        experience.setDescription(
+                getNullableText(experienceNode, "description")
+        );
+
+        experienceService.saveExperience(experience);
+    }
+}
 
         // =========================================================
         // 7. SAVE SKILLS
@@ -585,5 +680,52 @@ if (isValidIsoDate(endDate)) {
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"");
     }
+    
+private LocalDate parseExperienceDate(String value, boolean endDate) {
+    if (value == null || value.isBlank()) {
+        return null;
+    }
+
+    String normalized = value.trim();
+
+    if (normalized.matches("\\d{4}")) {
+        int year = Integer.parseInt(normalized);
+        return endDate
+                ? LocalDate.of(year, 12, 31)
+                : LocalDate.of(year, 1, 1);
+    }
+
+    if (normalized.matches("\\d{4}-\\d{2}-\\d{2}")) {
+        try {
+            return LocalDate.parse(normalized);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    if (normalized.matches("(?i)present|current")) {
+        return endDate ? null : LocalDate.now();
+    }
+
+    for (java.time.format.DateTimeFormatter formatter : List.of(
+            java.time.format.DateTimeFormatter.ofPattern("MMM yyyy",
+                    java.util.Locale.ENGLISH),
+            java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy",
+                    java.util.Locale.ENGLISH))) {
+        try {
+            java.time.YearMonth month =
+                    java.time.YearMonth.parse(normalized, formatter);
+
+            return endDate
+                    ? month.atEndOfMonth()
+                    : month.atDay(1);
+        } catch (Exception ignored) {
+            // Try the next format.
+        }
+    }
+
+    return null;
+}
+
 }
 

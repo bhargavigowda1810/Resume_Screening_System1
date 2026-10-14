@@ -146,9 +146,11 @@ public class SecurityConfig {
         HttpMethod.POST,
         "/api/users/register",
         "/api/users/login",
+        "/api/users/send-registration-otp",
+        "/api/users/verify-registration-otp",
         "/api/users/forgot-password",
         "/api/users/forgot-password-otp",
-"/api/users/verify-password-reset-otp",
+        "/api/users/verify-password-reset-otp",
         "/api/users/reset-password"
 ).permitAll()
 
@@ -226,15 +228,16 @@ public class SecurityConfig {
                 ).permitAll()
 
                 // Screening
-                .requestMatchers(
-                        "/api/screening/**"
-                ).permitAll()
+              // Screening — authenticated recruiters only
+.requestMatchers(
+        "/api/screening/**"
+).hasRole("RECRUITER")
 
                 // Screening results
-                .requestMatchers(
-                        "/api/screening-results/**"
-                ).permitAll()
-
+               // Screening results — authenticated recruiters only
+.requestMatchers(
+        "/api/screening-results/**"
+).hasRole("RECRUITER")
                 // Anything else
                 .anyRequest().authenticated()
             );

@@ -4,7 +4,10 @@ import resume_screening_backend.entity.Resume;
 import resume_screening_backend.service.ResumeService;
 import resume_screening_backend.service.AiResumeService;
 import org.springframework.security.core.Authentication;
-
+import resume_screening_backend.entity.Application;
+import resume_screening_backend.entity.Job;
+import resume_screening_backend.repository.ApplicationRepository;
+import resume_screening_backend.repository.JobRepository;
 import resume_screening_backend.entity.User;
 import resume_screening_backend.service.UserService;
 
@@ -30,15 +33,21 @@ public class ResumeController {
     private final ResumeService resumeService;
 private final AiResumeService aiResumeService;
 private final UserService userService;
+private final ApplicationRepository applicationRepository;
+private final JobRepository jobRepository;
 
 public ResumeController(
         ResumeService resumeService,
         AiResumeService aiResumeService,
-        UserService userService) {
+        UserService userService,
+        ApplicationRepository applicationRepository,
+        JobRepository jobRepository) {
 
     this.resumeService = resumeService;
     this.aiResumeService = aiResumeService;
     this.userService = userService;
+    this.applicationRepository = applicationRepository;
+    this.jobRepository = jobRepository;
 }
     // =========================================================
     // SAVE RESUME
@@ -127,110 +136,95 @@ Long userId = user.get().getUserId();
     // VIEW / DOWNLOAD ACTUAL RESUME FILE
     // =========================================================
 
-   @GetMapping("/{resumeId}/file")
+  
+@GetMapping("/{resumeId}/file")
 public ResponseEntity<Resource> getResumeFile(
         @PathVariable Long resumeId,
         Authentication authentication) {
 
-        try {
+    try {
+        Optional<User> user =
+                userService.findByEmail(authentication.getName());
 
-            // Find resume record
-            Optional<Resume> resume =
-                    resumeService.findById(resumeId);
-Optional<User> user =
-        userService.findByEmail(authentication.getName());
-
-if (user.isEmpty()) {
-    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-}
-
-Long userId = user.get().getUserId();
-if (resume.isPresent() &&
-        !userId.equals(resume.get().getApplicantId())) {
-
-    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-}
-            if (resume.isEmpty()) {
-                return ResponseEntity
-                        .notFound()
-                        .build();
-            }
-
-            // Get file path from database
-            String filePath =
-                    resume.get().getFilePath();
-
-            if (filePath == null ||
-                    filePath.isBlank()) {
-
-                return ResponseEntity
-                        .notFound()
-                        .build();
-            }
-
-            // Convert database path to Path
-            Path path =
-                    Paths.get(filePath);
-
-            // Check whether physical file exists
-            if (!Files.exists(path)) {
-
-                return ResponseEntity
-                        .notFound()
-                        .build();
-            }
-
-            // Create Spring Resource
-            Resource resource =
-                    new UrlResource(path.toUri());
-
-            if (!resource.exists() ||
-                    !resource.isReadable()) {
-
-                return ResponseEntity
-                        .notFound()
-                        .build();
-            }
-
-            // Determine content type
-            String contentType =
-                    Files.probeContentType(path);
-
-            if (contentType == null) {
-                contentType =
-                        "application/octet-stream";
-            }
-
-            // Return file to browser
-            return ResponseEntity
-                    .ok()
-                    .contentType(
-                            MediaType.parseMediaType(
-                                    contentType
-                            )
-                    )
-                    .header(
-                            HttpHeaders.CONTENT_DISPOSITION,
-                            "inline; filename=\"" +
-                                    resume.get().getFileName() +
-                                    "\""
-                    )
-                    .body(resource);
-
-        } catch (Exception e) {
-
-            System.err.println(
-                    "Error loading resume file: "
-                            + e.getMessage()
-            );
-
-            return ResponseEntity
-                    .status(
-                            HttpStatus.INTERNAL_SERVER_ERROR
-                    )
-                    .build();
+        if (user.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+
+        Optional<Resume> resumeOptional =
+                resumeService.findById(resumeId);
+
+        if (resumeOptional.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Resume resume = resumeOptional.get();
+        Long userId = user.get().getUserId();
+
+        // Applicants can view their own resumes.
+        boolean authorized = userId.equals(resume.getApplicantId());
+
+        // Recruiters can view resumes of applicants to their jobs.
+        if (!authorized && "RECRUITER".equalsIgnoreCase(user.get().getRole())) {
+            List<Application> applications =
+                    applicationRepository.findByApplicantId(
+                            resume.getApplicantId());
+
+            for (Application application : applications) {
+                Optional<Job> jobOptional =
+                        jobRepository.findById(application.getJobId());
+
+                if (jobOptional.isPresent()
+                        && userId.equals(jobOptional.get().getRecruiterId())) {
+                    authorized = true;
+                    break;
+                }
+            }
+        }
+
+        if (!authorized) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        String filePath = resume.getFilePath();
+
+        if (filePath == null || filePath.isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path path = Paths.get(filePath).toAbsolutePath().normalize();
+
+        if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Resource resource = new UrlResource(path.toUri());
+
+        String contentType = Files.probeContentType(path);
+        if (contentType == null) {
+            contentType = "application/octet-stream";
+        }
+
+        String filename = resume.getFileName();
+        if (filename == null || filename.isBlank()) {
+            filename = path.getFileName().toString();
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + filename.replace("\"", "") + "\"")
+                .body(resource);
+
+    } catch (Exception e) {
+        System.err.println(
+                "Error loading resume file: " + e.getMessage());
+
+        return ResponseEntity.status(
+                HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
+}
+
 
     // =========================================================
     // GET ALL RESUMES
@@ -349,79 +343,58 @@ Long userId = user.get().getUserId();
     // PARSE AND SAVE RESUME USING AI SERVICE
     // =========================================================
 
-    @PostMapping(
-            value = "/parse",
-            consumes =
-                    MediaType.MULTIPART_FORM_DATA_VALUE
-    )
-    public ResponseEntity<String> parseResume(
-        @RequestParam("file")
-        MultipartFile file,
-
-        @RequestParam("applicantId")
-        Long applicantId,
-
+  @PostMapping(
+        value = "/parse",
+        consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+)
+public ResponseEntity<String> parseResume(
+        @RequestParam("file") MultipartFile file,
         Authentication authentication) {
 
-        try {
-Optional<User> user =
-        userService.findByEmail(authentication.getName());
+    try {
 
-if (user.isEmpty()) {
-    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-}
+        Optional<User> user =
+                userService.findByEmail(authentication.getName());
 
-Long userId = user.get().getUserId();
-
-if (!userId.equals(applicantId)) {
-    return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-}
-            // Validate file
-            if (file.isEmpty()) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body(
-                                "File cannot be empty."
-                        );
-            }
-
-            // Validate applicant ID
-            if (applicantId == null) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body(
-                                "Applicant ID is required."
-                        );
-            }
-
-            // Send resume to AI service
-            String result =
-                    aiResumeService
-                            .parseAndSaveResume(
-                                    file,
-                                    applicantId
-                            );
-
-            return ResponseEntity.ok(result);
-
-        } catch (Exception e) {
-
-            System.err.println(
-                    "Resume processing failed: "
-                            + e.getMessage()
-            );
-
+        if (user.isEmpty()) {
             return ResponseEntity
-                    .status(
-                            HttpStatus.INTERNAL_SERVER_ERROR
-                    )
-                    .body(
-                            "Resume processing failed: "
-                                    + e.getMessage()
-                    );
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body("User not found. Please login again.");
         }
+
+        // Get applicant ID from the authenticated user
+        Long applicantId = user.get().getUserId();
+
+        // Validate file
+        if (file.isEmpty()) {
+            return ResponseEntity
+                    .badRequest()
+                    .body("File cannot be empty.");
+        }
+
+        // Send resume to AI service
+        String result =
+                aiResumeService.parseAndSaveResume(
+                        file,
+                        applicantId
+                );
+
+        return ResponseEntity.ok(result);
+
+    } catch (Exception e) {
+
+        System.err.println(
+                "Resume processing failed: "
+                        + e.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(
+                        "Resume processing failed: "
+                                + e.getMessage()
+                );
     }
+}
 }
 

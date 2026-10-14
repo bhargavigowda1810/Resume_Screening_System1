@@ -87,6 +87,10 @@ public class ScreeningService {
                                                 + jobId
                                 ));
 
+
+
+
+
         // -----------------------------------------------------
         // Semantic similarity
         // -----------------------------------------------------
@@ -199,6 +203,40 @@ public class ScreeningService {
         );
 
         return screeningResultRepository.save(result);
+    }
+
+
+    // =========================================================
+    // SCREEN ALL APPLICATIONS FOR A JOB
+    // =========================================================
+
+    public List<ScreeningResult> screenApplicationsForJob(Long jobId) {
+
+        // Verify that the job exists
+        jobRepository.findById(jobId)
+                .orElseThrow(() ->
+                        new RuntimeException("Job not found: " + jobId));
+
+        // Retrieve all applications for this job
+        List<Application> applications =
+                applicationRepository.findByJobId(jobId);
+
+        if (applications == null || applications.isEmpty()) {
+            throw new RuntimeException(
+                    "No applications found for job: " + jobId);
+        }
+
+        List<ScreeningResult> results = new ArrayList<>();
+
+        // Reuse the existing screening logic for every application
+        for (Application application : applications) {
+            ScreeningResult result =
+                    screenApplication(application.getApplicationId());
+
+            results.add(result);
+        }
+
+        return results;
     }
 
     // =========================================================

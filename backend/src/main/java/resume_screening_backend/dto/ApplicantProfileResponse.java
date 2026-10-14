@@ -23,14 +23,9 @@ public class ApplicantProfileResponse {
     private String github;
     private String portfolio;
 
-    @JsonRawValue
-    private String projects;
-
-    @JsonRawValue
-    private String certifications;
-
-    @JsonRawValue
-    private String achievements;
+ private JsonNode projects;
+private JsonNode certifications;
+private JsonNode achievements;
 
     private List<EducationResponse> education;
     private List<ExperienceResponse> experience;
@@ -135,31 +130,30 @@ public class ApplicantProfileResponse {
         this.portfolio = portfolio;
     }
 
-    public String getProjects() {
-        return projects;
-    }
+    public JsonNode getProjects() {
+    return projects;
+}
 
-    public void setProjects(JsonNode projects) {
-        this.projects = projects != null ? projects.toString() : "[]";
-    }
+public void setProjects(JsonNode projects) {
+    this.projects = projects;
+}
 
-    public String getCertifications() {
-        return certifications;
-    }
+
+    public JsonNode getCertifications() {
+    return certifications;
+}
 
     public void setCertifications(JsonNode certifications) {
-        this.certifications =
-                certifications != null ? certifications.toString() : "[]";
-    }
+    this.certifications = certifications;
+}
 
-    public String getAchievements() {
-        return achievements;
-    }
+    public JsonNode getAchievements() {
+    return achievements;
+}
 
     public void setAchievements(JsonNode achievements) {
-        this.achievements =
-                achievements != null ? achievements.toString() : "[]";
-    }
+    this.achievements = achievements;
+}
 
     public List<EducationResponse> getEducation() {
         return education;
