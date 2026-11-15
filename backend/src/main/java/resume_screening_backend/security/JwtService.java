@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import resume_screening_backend.entity.User;
 
+import java.util.UUID;
+
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -33,21 +35,24 @@ public class JwtService {
 
     public String generateToken(User user) {
 
-        Date issuedAt = new Date();
+    Date issuedAt = new Date();
 
-        Date expiration = new Date(
-                issuedAt.getTime() + expirationTime
-        );
+    Date expiration = new Date(
+            issuedAt.getTime() + expirationTime
+    );
 
-        return Jwts.builder()
-                .subject(user.getEmail())
-                .claim("userId", user.getUserId())
-                .claim("role", user.getRole())
-                .issuedAt(issuedAt)
-                .expiration(expiration)
-                .signWith(secretKey)
-                .compact();
-    }
+    return Jwts.builder()
+            .subject(user.getEmail())
+            .claim(
+                    "userUuid",
+                    user.getUserUuid().toString()
+            )
+            .claim("role", user.getRole())
+            .issuedAt(issuedAt)
+            .expiration(expiration)
+            .signWith(secretKey)
+            .compact();
+}
 
     public String generateEmailVerificationToken(String email) {
 
@@ -70,10 +75,13 @@ public class JwtService {
         return extractClaims(token).getSubject();
     }
 
-    public Long extractUserId(String token) {
-        return extractClaims(token)
-                .get("userId", Long.class);
-    }
+    public UUID extractUserUuid(String token) {
+
+    String uuid = extractClaims(token)
+            .get("userUuid", String.class);
+
+    return UUID.fromString(uuid);
+}
 
     public String extractRole(String token) {
         return extractClaims(token)

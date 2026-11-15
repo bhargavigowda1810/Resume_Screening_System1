@@ -293,36 +293,53 @@ public ArrayNode extractCertifications(String text) {
     return result;
 }
 
+public ArrayNode extractAchievements(String text) {
+    ArrayNode result = objectMapper.createArrayNode();
 
-    public ArrayNode extractAchievements(String text) {
-        ArrayNode result = objectMapper.createArrayNode();
+    String section = extractSection(
+            text,
+            "Achievements|Awards|Honors|Honours|"
+                    + "Accomplishments|Extracurricular Activities",
+            "Projects|Education|Experience|Certifications|"
+                    + "Leadership Experience|Relevant Coursework|"
+                    + "Technical Skills|Skills|"
+                    + "Professional Summary|Summary|"
+                    + "Work Experience|Internships|Languages"
+    );
 
-        String section = extractSection(
-                text, "Achievements|Awards",
-                "Projects|Education|Experience|Certifications|"
-                + "Leadership Experience|Relevant Coursework|"
-                + "Technical Skills|Skills"
-        );
-
-        if (section == null) return result;
-
-        for (String raw : section.split("\\R")) {
-            String line = raw.trim()
-                    .replaceFirst("^[•\\-*?]+\\s*", "")
-                    .trim();
-
-            if (line.isEmpty()) continue;
-
-            ObjectNode item = objectMapper.createObjectNode();
-            item.put("title", line);
-            item.put("description", "");
-            item.put("date", "");
-            item.put("issuer", "");
-            result.add(item);
-        }
-
+    if (section == null || section.isBlank()) {
         return result;
     }
+
+    for (String raw : section.split("\\R")) {
+        String line = raw.trim()
+                .replaceFirst("^[•\\-*▪◦]+\\s*", "")
+                .replaceFirst("^\\d+[.)]\\s*", "")
+                .trim();
+
+        if (line.isEmpty()) {
+            continue;
+        }
+
+        // Ignore a heading accidentally captured as an entry.
+        if (line.matches(
+                "(?i)^(achievements|awards|honou?rs|"
+                        + "accomplishments|projects|education|"
+                        + "experience|certifications|skills)$")) {
+            continue;
+        }
+
+        ObjectNode item = objectMapper.createObjectNode();
+        item.put("title", line);
+        item.put("description", "");
+        item.put("date", "");
+        item.put("issuer", "");
+
+        result.add(item);
+    }
+
+    return result;
+}
 
     private String extractSection(
             String text, String heading, String stopHeadings) {
@@ -490,6 +507,7 @@ private String extractContactUrl(String text, String regex) {
     return url.replaceAll("[.)]+$", "");
 }
 
+
 public ArrayNode extractEducation(String text) {
     ArrayNode result = objectMapper.createArrayNode();
 
@@ -503,19 +521,39 @@ public ArrayNode extractEducation(String text) {
                     + "Achievements|Awards|Relevant Coursework"
     );
 
-    if (section == null) return result;
+    if (section == null) {
+        return result;
+    }
 
     String[] lines = section.split("\\R");
     ObjectNode current = null;
 
     Pattern yearRange = Pattern.compile(
-            "(?i)\\b(19\\d{2}|20\\d{2})\\s*[-–—?to]+\\s*"
+            "(?i)\\b(19\\d{2}|20\\d{2})\\s*"
+                    + "(?:-|–|—|to)\\s*"
                     + "(Present|Current|19\\d{2}|20\\d{2})\\b"
+    );
+
+    Pattern gradePattern = Pattern.compile(
+            "(?i)\\b(?:CGPA|GPA|Grade|Percentage|Score)"
+                    + "\\s*:?\\s*"
+                    + "([0-9]+(?:\\.[0-9]+)?"
+                    + "\\s*(?:/\\s*[0-9]+(?:\\.[0-9]+)?|%)?)"
+    );
+
+    Pattern degreePattern = Pattern.compile(
+            "(?i).*(bachelor|master|phd|doctorate|diploma|"
+                    + "degree|b\\.?tech|m\\.?tech|b\\.?e\\.?|"
+                    + "m\\.?e\\.?|bca|mca|bsc|msc|mba|"
+                    + "high school|secondary).*"
     );
 
     for (String raw : lines) {
         String line = raw.trim();
-        if (line.isEmpty()) continue;
+
+        if (line.isEmpty()) {
+            continue;
+        }
 
         Matcher years = yearRange.matcher(line);
 
@@ -525,23 +563,20 @@ public ArrayNode extractEducation(String text) {
                 result.add(current);
             }
 
-            int start = Integer.parseInt(years.group(1));
+            current.put("startYear",
+                    Integer.parseInt(years.group(1)));
+
             String endText = years.group(2);
 
-            current.put("startYear", start);
-
             if (endText.matches("\\d{4}")) {
-                current.put("endYear", Integer.parseInt(endText));
+                current.put("endYear",
+                        Integer.parseInt(endText));
             }
 
             line = line.replace(years.group(), "").trim();
         }
 
-        Matcher grade = Pattern.compile(
-                "(?i)\\b(?:CGPA|GPA|Grade|Percentage|Score)"
-                        + "\\s*:?\\s*([0-9]+(?:\\.[0-9]+)?"
-                        + "\\s*(?:/\\s*[0-9]+|%)?)"
-        ).matcher(line);
+        Matcher grade = gradePattern.matcher(line);
 
         if (grade.find()) {
             if (current == null) {
@@ -550,10 +585,19 @@ public ArrayNode extractEducation(String text) {
             }
 
             current.put("grade", grade.group(1).trim());
-            line = line.replace(grade.group(), "").trim();
+            line = gradePattern.matcher(line).replaceFirst("").trim();
         }
 
-        if (line.isEmpty()) continue;
+        // Ignore punctuation and leftover numeric fragments.
+        line = line.replace('\uFFFD', ' ')
+                   .replaceAll("^[\\s?–—-]+|[\\s?–—-]+$", "")
+                   .trim();
+
+        if (line.isEmpty()
+                || line.matches("[./%\\s]+")
+                || line.matches("\\d+(?:\\.\\d+)?")) {
+            continue;
+        }
 
         if (current == null) {
             current = objectMapper.createObjectNode();
@@ -563,19 +607,39 @@ public ArrayNode extractEducation(String text) {
         if (line.matches(
                 "(?i).*(university|college|institute|school|"
                         + "academy|polytechnic).*")) {
+
             if (!current.has("institution")) {
                 current.put("institution", line);
             }
-        } else if (line.matches(
-                "(?i).*(bachelor|master|phd|doctorate|diploma|"
-                        + "degree|b\\.?tech|m\\.?tech|b\\.?e\\.?|"
-                        + "m\\.?e\\.?|bca|mca|bsc|msc|mba|"
-                        + "high school|secondary).*")) {
+
+        } else if (degreePattern.matcher(line).matches()) {
+
             if (!current.has("degree")) {
-                current.put("degree", line);
+               
+
+String normalizedDegreeLine = line
+        .replace('\uFFFD', '-')
+        .replace('?', '-')
+        .replace('–', '-')
+        .replace('—', '-');
+
+Matcher degreeParts = Pattern.compile(
+        "(?i)^\\s*(Bachelor\\s+of\\s+Technology)"
+                + "\\s*[-:]\\s*(.+?)\\s*$"
+).matcher(normalizedDegreeLine);
+
+if (degreeParts.matches()) {
+    current.put("degree", "Bachelor of Technology");
+    current.put("fieldOfStudy", degreeParts.group(2).trim());
+} else {
+    current.put("degree", normalizedDegreeLine);
+}
+
+
             } else if (!current.has("fieldOfStudy")) {
                 current.put("fieldOfStudy", line);
             }
+
         } else if (!current.has("fieldOfStudy")) {
             current.put("fieldOfStudy", line);
         }
@@ -583,6 +647,7 @@ public ArrayNode extractEducation(String text) {
 
     return result;
 }
+
 
 
 

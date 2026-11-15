@@ -155,7 +155,8 @@ public class ScreeningResultService {
         dto.setExperienceScore(result.getExperienceScore());
         dto.setEducationScore(result.getEducationScore());
         dto.setFinalScore(result.getFinalScore());
-
+        dto.setAiMatchingScore(result.getAiMatchingScore());
+        dto.setAiMatchingResults(result.getAiMatchingResults());
         dto.setRecommendation(result.getRecommendation());
         dto.setProcessedAt(result.getProcessedAt());
 

@@ -30,11 +30,21 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import resume_screening_backend.repository.ResumeProfileRepository;
+
 @Service
 public class ScreeningService {
 
     private final ApplicationRepository applicationRepository;
     private final JobRepository jobRepository;
+    private final AiResumeService aiResumeService;
+    private final ResumeProfileRepository resumeProfileRepository;
+    private final ObjectMapper objectMapper;
     private final ResumeJobMatchService resumeJobMatchService;
     private final ResumeSkillRepository resumeSkillRepository;
     private final SkillRepository skillRepository;
@@ -50,6 +60,9 @@ public class ScreeningService {
             SkillRepository skillRepository,
             ExperienceRepository experienceRepository,
             EducationRepository educationRepository,
+            AiResumeService aiResumeService,
+            ResumeProfileRepository resumeProfileRepository,
+            ObjectMapper objectMapper,
             ScreeningResultRepository screeningResultRepository) {
 
         this.applicationRepository = applicationRepository;
@@ -59,6 +72,9 @@ public class ScreeningService {
         this.skillRepository = skillRepository;
         this.experienceRepository = experienceRepository;
         this.educationRepository = educationRepository;
+        this.aiResumeService = aiResumeService;
+        this.resumeProfileRepository = resumeProfileRepository;
+        this.objectMapper = objectMapper;
         this.screeningResultRepository = screeningResultRepository;
     }
 
@@ -77,6 +93,16 @@ public class ScreeningService {
                                 ));
 
         Long resumeId = application.getResumeId();
+        System.out.println("APPLICATION ID: " + application.getApplicationId());
+System.out.println("APPLICATION RESUME ID: " + application.getResumeId());
+        System.out.println(
+    "[SCREENING DEBUG] Application ID: "
+    + applicationId
+    + ", Applicant ID: "
+    + application.getApplicantId()
+    + ", Resume ID: "
+    + resumeId
+);
         Long jobId = application.getJobId();
 
         Job job =
@@ -86,6 +112,18 @@ public class ScreeningService {
                                         "Job not found: "
                                                 + jobId
                                 ));
+
+// -----------------------------------------------------
+// AI-BASED REQUIREMENT MATCHING
+// -----------------------------------------------------
+
+JsonNode aiMatchingResult =
+        performAiMatching(resumeId, job);
+
+System.out.println("========== AI MATCHING RESULT ==========");
+System.out.println(aiMatchingResult.toPrettyString());
+System.out.println("========================================");
+
 
 
 
@@ -199,11 +237,188 @@ public class ScreeningService {
         );
 
         result.setProcessedAt(
-                LocalDateTime.now()
+        LocalDateTime.now()
+);
+
+// -----------------------------------------------------
+// Save AI Matching Result
+// -----------------------------------------------------
+
+if (aiMatchingResult != null && !aiMatchingResult.isNull()) {
+
+    JsonNode aiScoreNode =
+            aiMatchingResult.path("score").path("score");
+
+    if (aiScoreNode.isNumber()) {
+        result.setAiMatchingScore(
+                toBigDecimal(aiScoreNode.asDouble())
+        );
+    }
+
+    result.setAiMatchingResults(aiMatchingResult);
+}
+
+return screeningResultRepository.save(result);
+    }
+
+
+// =========================================================
+// AI-BASED RESUME MATCHING
+// =========================================================
+
+private JsonNode performAiMatching(Long resumeId, Job job) {
+
+    try {
+
+        ObjectNode parsedResume = objectMapper.createObjectNode();
+
+        // 1. Extract skills
+        ArrayNode skillsArray = objectMapper.createArrayNode();
+
+        List<ResumeSkill> resumeSkills =
+                resumeSkillRepository.findByIdResumeId(resumeId);
+
+        for (ResumeSkill resumeSkill : resumeSkills) {
+
+            Long skillId = resumeSkill.getId().getSkillId();
+
+            skillRepository.findById(skillId).ifPresent(skill -> {
+                if (skill.getSkillName() != null) {
+                    skillsArray.add(skill.getSkillName());
+                }
+            });
+        }
+
+        parsedResume.set("skills", skillsArray);
+
+        // 2. Extract education
+        ArrayNode educationArray = objectMapper.createArrayNode();
+
+        List<Education> educations =
+                educationRepository.findByResumeId(resumeId);
+
+        for (Education education : educations) {
+
+            ObjectNode item = objectMapper.createObjectNode();
+
+            item.put("degree",
+                    education.getDegree() == null ? "" : education.getDegree());
+
+            item.put("institution",
+                    education.getInstitution() == null ? "" : education.getInstitution());
+
+            item.put("fieldOfStudy",
+                    education.getFieldOfStudy() == null ? "" : education.getFieldOfStudy());
+
+            educationArray.add(item);
+        }
+
+        parsedResume.set("education", educationArray);
+
+        // 3. Extract experience
+        ArrayNode experienceArray = objectMapper.createArrayNode();
+
+        List<Experience> experiences =
+                experienceRepository.findByResumeId(resumeId);
+
+        for (Experience experience : experiences) {
+
+            ObjectNode item = objectMapper.createObjectNode();
+
+            item.put("company",
+                    experience.getCompany() == null ? "" : experience.getCompany());
+
+            item.put("jobTitle",
+                    experience.getJobTitle() == null ? "" : experience.getJobTitle());
+
+            item.put("description",
+                    experience.getDescription() == null ? "" : experience.getDescription());
+
+            experienceArray.add(item);
+        }
+
+        parsedResume.set("experience", experienceArray);
+
+        // 4. Extract projects and certifications
+        var profileOptional =
+                resumeProfileRepository.findByResumeId(resumeId);
+
+        if (profileOptional.isPresent()) {
+
+            var profile = profileOptional.get();
+
+            parsedResume.set(
+                    "projects",
+                    profile.getProjects() == null
+                            ? objectMapper.createArrayNode()
+                            : profile.getProjects()
+            );
+
+            parsedResume.set(
+                    "certifications",
+                    profile.getCertifications() == null
+                            ? objectMapper.createArrayNode()
+                            : profile.getCertifications()
+            );
+
+        } else {
+
+            parsedResume.set("projects", objectMapper.createArrayNode());
+            parsedResume.set("certifications", objectMapper.createArrayNode());
+        }
+
+        // 5. Prepare job requirements
+        List<String> requirements = new ArrayList<>();
+
+        if (job.getRequiredSkills() != null) {
+
+            for (String skill : job.getRequiredSkills().split(",")) {
+
+                if (!skill.isBlank()) {
+                    requirements.add(skill.trim());
+                }
+            }
+        }
+
+        if (job.getEducationRequirement() != null
+                && !job.getEducationRequirement().isBlank()) {
+
+            requirements.add(job.getEducationRequirement());
+        }
+
+        if (requirements.isEmpty()) {
+            throw new RuntimeException(
+                    "No job requirements available for AI matching."
+            );
+        }
+
+        // 6. Prepare job description with required section
+        String jobDescription =
+                job.getTitle()
+                + "\n\nRequired:\n"
+                + job.getRequiredSkills()
+                + "\n\n"
+                + job.getDescription();
+                System.out.println("RESUME ID USED FOR AI MATCHING: " + resumeId);
+System.out.println("========== PREPARED RESUME DATA ==========");
+System.out.println(parsedResume.toPrettyString());
+System.out.println("==========================================");
+
+        // 7. Call Python AI service
+        return aiResumeService.matchResumeWithAI(
+                parsedResume,
+                requirements,
+                jobDescription
         );
 
-        return screeningResultRepository.save(result);
+    } catch (Exception e) {
+
+        throw new RuntimeException(
+                "AI resume matching failed: " + e.getMessage(),
+                e
+        );
     }
+}
 
 
     // =========================================================
@@ -517,6 +732,13 @@ public class ScreeningService {
                                 education.getDegree()
                         );
 
+System.out.println(
+        "[EDUCATION DEBUG] Resume ID: " + resumeId
+        + ", Stored degree: " + education.getDegree()
+        + ", Normalized candidate: " + candidateDegree
+        + ", Requirement: " + educationRequirement
+);
+
                 if (candidateDegree.isBlank()) {
                     continue;
                 }
@@ -526,16 +748,24 @@ public class ScreeningService {
                  * candidate education, education score = 100%.
                  */
 
-                if (isDegreeMatch(
-                        candidateDegree,
-                        requiredDegree
-                )) {
+             System.out.println(
+        "[EDUCATION DEBUG] Comparing candidate="
+        + candidateDegree
+        + ", required=" + requiredDegree
+        + ", match=" + isDegreeMatch(
+                candidateDegree,
+                requiredDegree
+        )
+);
 
-                    return 100.0;
-                }
+if (isDegreeMatch(
+        candidateDegree,
+        requiredDegree
+)) {
+    return 100.0;
+}
             }
         }
-
         return 0.0;
     }
 
@@ -639,433 +869,294 @@ public class ScreeningService {
     // UNDERGRADUATE DEGREE
     // =========================================================
 
-    private boolean isUndergraduateDegree(String degree) {
+   
+private String canonicalDegree(String degree) {
 
-        if (degree == null ||
-                degree.isBlank()) {
-
-            return false;
-        }
-
-        return degree.equals("bca")
-                || degree.equals("bcom")
-                || degree.equals("bba")
-                || degree.equals("bsc")
-                || degree.equals("ba")
-                || degree.equals("be")
-                || degree.equals("btech")
-                || degree.equals("bpharm")
-                || degree.equals("bdes")
-                || degree.equals("barch")
-                || degree.equals("bed")
-                || degree.equals("llb")
-                || degree.equals("mbbs");
+    if (degree == null || degree.isBlank()) {
+        return "";
     }
 
-    // =========================================================
-    // POSTGRADUATE DEGREE
-    // =========================================================
+    String value = degree
+            .toLowerCase(Locale.ROOT)
+            .trim()
+            .replace("â€™", "'")
+            .replaceAll("[^a-z0-9]", "");
 
-    private boolean isPostgraduateDegree(String degree) {
-
-        if (degree == null ||
-                degree.isBlank()) {
-
-            return false;
-        }
-
-        return degree.equals("mca")
-                || degree.equals("mcom")
-                || degree.equals("mba")
-                || degree.equals("msc")
-                || degree.equals("ma")
-                || degree.equals("me")
-                || degree.equals("mtech")
-                || degree.equals("mpharm")
-                || degree.equals("mdes")
-                || degree.equals("march")
-                || degree.equals("med")
-                || degree.equals("llm")
-                || degree.equals("phd");
-    }
-
-    // =========================================================
-    // CANONICAL DEGREE
-    // =========================================================
-
-    private String canonicalDegree(String degree) {
-
-        if (degree == null) {
-            return "";
-        }
-
-        String value =
-                degree
-                        .toLowerCase(Locale.ROOT)
-                        .trim()
-                        .replace("’", "'")
-                        .replaceAll("[^a-z0-9]", "");
-
-        // -----------------------------------------------------
-        // BCA - Bachelor of Computer Applications
-        // -----------------------------------------------------
-
-        if (value.equals("bca")
-                || value.equals("bachelorofcomputerapplications")
-                || value.equals("bachelorofcomputerapplication")
-                || value.equals("bachelorcomputerapplications")
-                || value.equals("bachelorcomputerapplication")) {
-
+    // Exact abbreviations and generic degree labels
+    switch (value) {
+        case "bca":
             return "bca";
-        }
-
-        // -----------------------------------------------------
-        // MCA - Master of Computer Applications
-        // -----------------------------------------------------
-
-        if (value.equals("mca")
-                || value.equals("masterofcomputerapplications")
-                || value.equals("masterofcomputerapplication")
-                || value.equals("mastercomputerapplications")
-                || value.equals("mastercomputerapplication")) {
-
+        case "mca":
             return "mca";
-        }
-
-        // -----------------------------------------------------
-        // B.Com - Bachelor of Commerce
-        // -----------------------------------------------------
-
-        if (value.equals("bcom")
-                || value.equals("bachelorofcommerce")
-                || value.equals("bachelorcommerce")) {
-
+        case "bcom":
             return "bcom";
-        }
-
-        // -----------------------------------------------------
-        // M.Com - Master of Commerce
-        // -----------------------------------------------------
-
-        if (value.equals("mcom")
-                || value.equals("masterofcommerce")
-                || value.equals("mastercommerce")) {
-
+        case "mcom":
             return "mcom";
-        }
-
-        // -----------------------------------------------------
-        // B.E. - Bachelor of Engineering
-        // -----------------------------------------------------
-
-        if (value.equals("be")
-                || value.equals("bachelorofengineering")
-                || value.equals("bachelorengineering")) {
-
+        case "be":
             return "be";
-        }
-
-        // -----------------------------------------------------
-        // M.E. - Master of Engineering
-        // -----------------------------------------------------
-
-        if (value.equals("me")
-                || value.equals("masterofengineering")
-                || value.equals("masterengineering")) {
-
+        case "me":
             return "me";
-        }
-
-        // -----------------------------------------------------
-        // B.Tech - Bachelor of Technology
-        // -----------------------------------------------------
-
-        if (value.equals("btech")
-                || value.equals("bacheloroftechnology")
-                || value.equals("bachelortechnology")) {
-
+        case "btech":
             return "btech";
-        }
-
-        // -----------------------------------------------------
-        // M.Tech - Master of Technology
-        // -----------------------------------------------------
-
-        if (value.equals("mtech")
-                || value.equals("masteroftechnology")
-                || value.equals("mastertechnology")) {
-
+        case "mtech":
             return "mtech";
-        }
-
-        // -----------------------------------------------------
-        // B.Sc - Bachelor of Science
-        // -----------------------------------------------------
-
-        if (value.equals("bsc")
-                || value.equals("bachelorofscience")
-                || value.equals("bachelorscience")) {
-
+        case "bsc":
             return "bsc";
-        }
-
-        // -----------------------------------------------------
-        // M.Sc - Master of Science
-        // -----------------------------------------------------
-
-        if (value.equals("msc")
-                || value.equals("masterofscience")
-                || value.equals("masterscience")) {
-
+        case "msc":
             return "msc";
-        }
-
-        // -----------------------------------------------------
-        // B.A. - Bachelor of Arts
-        // -----------------------------------------------------
-
-        if (value.equals("ba")
-                || value.equals("bachelorofarts")
-                || value.equals("bachelorarts")) {
-
+        case "ba":
             return "ba";
-        }
-
-        // -----------------------------------------------------
-        // M.A. - Master of Arts
-        // -----------------------------------------------------
-
-        if (value.equals("ma")
-                || value.equals("masterofarts")
-                || value.equals("masterarts")) {
-
+        case "ma":
             return "ma";
-        }
-
-        // -----------------------------------------------------
-        // BBA - Bachelor of Business Administration
-        // -----------------------------------------------------
-
-        if (value.equals("bba")
-                || value.equals("bachelorofbusinessadministration")
-                || value.equals("bachelorbusinessadministration")) {
-
+        case "bba":
             return "bba";
-        }
-
-        // -----------------------------------------------------
-        // MBA - Master of Business Administration
-        // -----------------------------------------------------
-
-        if (value.equals("mba")
-                || value.equals("masterofbusinessadministration")
-                || value.equals("masterbusinessadministration")) {
-
+        case "mba":
             return "mba";
-        }
-
-        // -----------------------------------------------------
-        // LLB - Bachelor of Laws
-        // -----------------------------------------------------
-
-        if (value.equals("llb")
-                || value.equals("bacheloroflaw")
-                || value.equals("bacheloroflaws")
-                || value.equals("bachelorlaws")) {
-
+        case "llb":
             return "llb";
-        }
-
-        // -----------------------------------------------------
-        // LLM - Master of Laws
-        // -----------------------------------------------------
-
-        if (value.equals("llm")
-                || value.equals("masteroflaw")
-                || value.equals("masteroflaws")
-                || value.equals("masterlaws")) {
-
+        case "llm":
             return "llm";
-        }
-
-        // -----------------------------------------------------
-        // MBBS
-        // -----------------------------------------------------
-
-        if (value.equals("mbbs")
-                || value.equals("bachelorofmedicine")
-                || value.equals("bachelorofmedicineandbachelorsurgery")
-                || value.equals("medicinebachelorsurgery")) {
-
+        case "mbbs":
             return "mbbs";
-        }
-
-        // -----------------------------------------------------
-        // B.Pharm - Bachelor of Pharmacy
-        // -----------------------------------------------------
-
-        if (value.equals("bpharm")
-                || value.equals("bachelorofpharmacy")
-                || value.equals("bachelorpharmacy")) {
-
+        case "bpharm":
             return "bpharm";
-        }
-
-        // -----------------------------------------------------
-        // M.Pharm - Master of Pharmacy
-        // -----------------------------------------------------
-
-        if (value.equals("mpharm")
-                || value.equals("masterofpharmacy")
-                || value.equals("masterpharmacy")) {
-
+        case "mpharm":
             return "mpharm";
-        }
-
-        // -----------------------------------------------------
-        // B.Des - Bachelor of Design
-        // -----------------------------------------------------
-
-        if (value.equals("bdes")
-                || value.equals("bachelorofdesign")
-                || value.equals("bachelordesign")) {
-
+        case "bdes":
             return "bdes";
-        }
-
-        // -----------------------------------------------------
-        // M.Des - Master of Design
-        // -----------------------------------------------------
-
-        if (value.equals("mdes")
-                || value.equals("masterofdesign")
-                || value.equals("masterdesign")) {
-
+        case "mdes":
             return "mdes";
-        }
-
-        // -----------------------------------------------------
-        // B.Arch - Bachelor of Architecture
-        // -----------------------------------------------------
-
-        if (value.equals("barch")
-                || value.equals("bachelorofarchitecture")
-                || value.equals("bachelorarchitecture")) {
-
+        case "barch":
             return "barch";
-        }
-
-        // -----------------------------------------------------
-        // M.Arch - Master of Architecture
-        // -----------------------------------------------------
-
-        if (value.equals("march")
-                || value.equals("masterofarchitecture")
-                || value.equals("masterarchitecture")) {
-
+        case "march":
             return "march";
-        }
-
-        // -----------------------------------------------------
-        // B.Ed - Bachelor of Education
-        // -----------------------------------------------------
-
-        if (value.equals("bed")
-                || value.equals("bachelorofeducation")
-                || value.equals("bacheloreducation")) {
-
+        case "bed":
             return "bed";
-        }
-
-        // -----------------------------------------------------
-        // M.Ed - Master of Education
-        // -----------------------------------------------------
-
-        if (value.equals("med")
-                || value.equals("masterofeducation")
-                || value.equals("mastereducation")) {
-
+        case "med":
             return "med";
-        }
-
-        // -----------------------------------------------------
-        // PhD - Doctor of Philosophy
-        // -----------------------------------------------------
-
-        if (value.equals("phd")
-                || value.equals("phddegree")
-                || value.equals("doctorofphilosophy")
-                || value.equals("doctorate")) {
-
+        case "phd":
+        case "phddegree":
+        case "doctorate":
             return "phd";
-        }
-
-        // -----------------------------------------------------
-        // Diploma
-        // -----------------------------------------------------
-
-        if (value.equals("diploma")
-                || value.equals("diplomaeducation")
-                || value.contains("diplomain")) {
-
-            return "diploma";
-        }
-
-        // -----------------------------------------------------
-        // Generic Bachelor's Degree
-        // -----------------------------------------------------
-
-        if (value.equals("bachelor")
-                || value.equals("bachelors")
-                || value.equals("bachelorsdegree")
-                || value.equals("bachelordegree")
-                || value.equals("undergraduate")
-                || value.equals("undergraduatedegree")
-                || value.equals("ug")
-                || value.equals("ugdegree")) {
-
+        case "bachelor":
+        case "bachelors":
+        case "bachelorsdegree":
+        case "bachelordegree":
+        case "undergraduate":
+        case "undergraduatedegree":
+        case "ug":
+        case "ugdegree":
             return "bachelor";
-        }
-
-        // -----------------------------------------------------
-        // Generic Master's Degree
-        // -----------------------------------------------------
-
-        if (value.equals("master")
-                || value.equals("masters")
-                || value.equals("mastersdegree")
-                || value.equals("masterdegree")
-                || value.equals("postgraduate")
-                || value.equals("postgraduatedegree")
-                || value.equals("pg")
-                || value.equals("pgdegree")) {
-
+        case "master":
+        case "masters":
+        case "mastersdegree":
+        case "masterdegree":
+        case "postgraduate":
+        case "postgraduatedegree":
+        case "pg":
+        case "pgdegree":
             return "master";
-        }
-
-        // -----------------------------------------------------
-        // Return normalized value if no mapping exists
-        // -----------------------------------------------------
-
-        return value;
     }
+
+    // Degrees with optional specialization suffixes
+    if (value.startsWith("bachelorofcomputerapplication")
+            || value.startsWith("bachelorcomputerapplication")) {
+        return "bca";
+    }
+
+    if (value.startsWith("masterofcomputerapplication")
+            || value.startsWith("mastercomputerapplication")) {
+        return "mca";
+    }
+
+    if (value.startsWith("bachelorofcommerce")
+            || value.startsWith("bachelorcommerce")) {
+        return "bcom";
+    }
+
+    if (value.startsWith("masterofcommerce")
+            || value.startsWith("mastercommerce")) {
+        return "mcom";
+    }
+
+    if (value.startsWith("bachelorofengineering")
+            || value.startsWith("bachelorengineering")) {
+        return "be";
+    }
+
+    if (value.startsWith("masterofengineering")
+            || value.startsWith("masterengineering")) {
+        return "me";
+    }
+
+    if (value.startsWith("bacheloroftechnology")
+            || value.startsWith("bachelortechnology")) {
+        return "btech";
+    }
+
+    if (value.startsWith("masteroftechnology")
+            || value.startsWith("mastertechnology")) {
+        return "mtech";
+    }
+
+    if (value.startsWith("bachelorofscience")
+            || value.startsWith("bachelorscience")) {
+        return "bsc";
+    }
+
+    if (value.startsWith("masterofscience")
+            || value.startsWith("masterscience")) {
+        return "msc";
+    }
+
+    if (value.startsWith("bachelorofarts")
+            || value.startsWith("bachelorarts")) {
+        return "ba";
+    }
+
+    if (value.startsWith("masterofarts")
+            || value.startsWith("masterarts")) {
+        return "ma";
+    }
+
+    if (value.startsWith("bachelorofbusinessadministration")
+            || value.startsWith("bachelorbusinessadministration")) {
+        return "bba";
+    }
+
+    if (value.startsWith("masterofbusinessadministration")
+            || value.startsWith("masterbusinessadministration")) {
+        return "mba";
+    }
+
+    if (value.startsWith("bacheloroflaw")
+            || value.startsWith("bacheloroflaws")
+            || value.startsWith("bachelorlaws")) {
+        return "llb";
+    }
+
+    if (value.startsWith("masteroflaw")
+            || value.startsWith("masteroflaws")
+            || value.startsWith("masterlaws")) {
+        return "llm";
+    }
+
+    if (value.startsWith("bachelorofmedicine")
+            || value.startsWith("medicinebachelorsurgery")) {
+        return "mbbs";
+    }
+
+    if (value.startsWith("bachelorofpharmacy")
+            || value.startsWith("bachelorpharmacy")) {
+        return "bpharm";
+    }
+
+    if (value.startsWith("masterofpharmacy")
+            || value.startsWith("masterpharmacy")) {
+        return "mpharm";
+    }
+
+    if (value.startsWith("bachelorofdesign")
+            || value.startsWith("bachelordesign")) {
+        return "bdes";
+    }
+
+    if (value.startsWith("masterofdesign")
+            || value.startsWith("masterdesign")) {
+        return "mdes";
+    }
+
+    if (value.startsWith("bachelorofarchitecture")
+            || value.startsWith("bachelorarchitecture")) {
+        return "barch";
+    }
+
+    if (value.startsWith("masterofarchitecture")
+            || value.startsWith("masterarchitecture")) {
+        return "march";
+    }
+
+    if (value.startsWith("bachelorofeducation")
+            || value.startsWith("bacheloreducation")) {
+        return "bed";
+    }
+
+    if (value.startsWith("masterofeducation")
+            || value.startsWith("mastereducation")) {
+        return "med";
+    }
+
+    if (value.startsWith("doctorofphilosophy")) {
+        return "phd";
+    }
+
+    if (value.equals("diploma")
+            || value.equals("diplomaeducation")
+            || value.startsWith("diplomain")) {
+        return "diploma";
+    }
+
+    return value;
+}
+
+private boolean isUndergraduateDegree(String degree) {
+    if (degree == null || degree.isBlank()) {
+        return false;
+    }
+
+    String value = canonicalDegree(degree);
+
+    return value.equals("bachelor")
+            || value.equals("bca")
+            || value.equals("bcom")
+            || value.equals("be")
+            || value.equals("btech")
+            || value.equals("bsc")
+            || value.equals("ba")
+            || value.equals("bba")
+            || value.equals("llb")
+            || value.equals("mbbs")
+            || value.equals("bpharm")
+            || value.equals("bdes")
+            || value.equals("barch")
+            || value.equals("bed")
+            || value.equals("diploma");
+}
+
+private boolean isPostgraduateDegree(String degree) {
+    if (degree == null || degree.isBlank()) {
+        return false;
+    }
+
+    String value = canonicalDegree(degree);
+
+    return value.equals("master")
+            || value.equals("mca")
+            || value.equals("mcom")
+            || value.equals("me")
+            || value.equals("mtech")
+            || value.equals("msc")
+            || value.equals("ma")
+            || value.equals("mba")
+            || value.equals("llm")
+            || value.equals("mpharm")
+            || value.equals("mdes")
+            || value.equals("march")
+            || value.equals("med")
+            || value.equals("phd");
+}
 
     // =========================================================
     // NORMALIZE DEGREE
     // =========================================================
+private String normalizeDegree(String degree) {
 
-    private String normalizeDegree(String degree) {
-
-        if (degree == null) {
-            return "";
-        }
-
-        return degree
-                .toLowerCase(Locale.ROOT)
-                .trim()
-                .replace("’", "'")
-                .replaceAll("[^a-z0-9]", "");
+    if (degree == null || degree.isBlank()) {
+        return "";
     }
+
+    return canonicalDegree(degree);
+}
 
     // =========================================================
     // RECOMMENDATION

@@ -1,3 +1,4 @@
+
 package resume_screening_backend.repository;
 
 import resume_screening_backend.entity.Job;
@@ -9,4 +10,6 @@ public interface JobRepository extends JpaRepository<Job, Long> {
 
     List<Job> findByRecruiterId(Long recruiterId);
 
+    // Retrieve all jobs for applicant-side recommendations
+    List<Job> findAllByOrderByCreatedAtDesc();
 }

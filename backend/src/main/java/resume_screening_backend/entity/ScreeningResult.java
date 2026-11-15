@@ -4,6 +4,10 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(
     name = "screening_results",
@@ -44,6 +48,13 @@ public class ScreeningResult {
 
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
+
+    @Column(name = "ai_matching_score", precision = 5, scale = 2)
+    private BigDecimal aiMatchingScore;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "ai_matching_results", columnDefinition = "jsonb")
+    private JsonNode aiMatchingResults;
 
     public ScreeningResult() {
     }
@@ -119,4 +130,21 @@ public class ScreeningResult {
     public void setProcessedAt(LocalDateTime processedAt) {
         this.processedAt = processedAt;
     }
+
+public BigDecimal getAiMatchingScore() {
+    return aiMatchingScore;
+}
+
+public void setAiMatchingScore(BigDecimal aiMatchingScore) {
+    this.aiMatchingScore = aiMatchingScore;
+}
+
+public JsonNode getAiMatchingResults() {
+    return aiMatchingResults;
+}
+
+public void setAiMatchingResults(JsonNode aiMatchingResults) {
+    this.aiMatchingResults = aiMatchingResults;
+}
+
 }

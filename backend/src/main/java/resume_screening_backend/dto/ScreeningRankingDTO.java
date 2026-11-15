@@ -2,6 +2,7 @@ package resume_screening_backend.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.fasterxml.jackson.databind.JsonNode;
 
 public class ScreeningRankingDTO {
 
@@ -19,6 +20,9 @@ public class ScreeningRankingDTO {
     private BigDecimal experienceScore;
     private BigDecimal educationScore;
     private BigDecimal finalScore;
+    private BigDecimal aiMatchingScore;
+
+    private JsonNode aiMatchingResults;
 
     private String recommendation;
     private LocalDateTime processedAt;
@@ -137,4 +141,20 @@ public class ScreeningRankingDTO {
     public void setProcessedAt(LocalDateTime processedAt) {
         this.processedAt = processedAt;
     }
+public BigDecimal getAiMatchingScore() {
+    return aiMatchingScore;
+}
+
+public void setAiMatchingScore(BigDecimal aiMatchingScore) {
+    this.aiMatchingScore = aiMatchingScore;
+}
+
+public JsonNode getAiMatchingResults() {
+    return aiMatchingResults;
+}
+
+public void setAiMatchingResults(JsonNode aiMatchingResults) {
+    this.aiMatchingResults = aiMatchingResults;
+}
+
 }

@@ -42,3 +42,23 @@ resume_schema.sql
 resume_screening_backend_backup.dump
 ../ai-service/**/__pycache__/
 ../ai-service/**/*.pyc
+
+
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python virtual environments
+venv/
+.venv/
+
+# Backup archives
+*.zip
+*.dump
+
+# Environment variables
+.env
+.env.*
+!.env.example

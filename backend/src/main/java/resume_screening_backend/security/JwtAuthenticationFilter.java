@@ -1,3 +1,4 @@
+
 package resume_screening_backend.security;
 
 import jakarta.servlet.FilterChain;
@@ -17,6 +18,7 @@ import resume_screening_backend.repository.UserRepository;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -24,13 +26,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserRepository userRepository;
 
-   public JwtAuthenticationFilter(
-        JwtService jwtService,
-        UserRepository userRepository
-) {
-    this.jwtService = jwtService;
-    this.userRepository = userRepository;
-}
+    public JwtAuthenticationFilter(
+            JwtService jwtService,
+            UserRepository userRepository
+    ) {
+        this.jwtService = jwtService;
+        this.userRepository = userRepository;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -42,45 +44,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authorizationHeader =
                 request.getHeader("Authorization");
 
-                System.out.println("JWT FILTER HIT: " + request.getMethod() + " " + request.getRequestURI());
-
         if (authorizationHeader == null
                 || !authorizationHeader.startsWith("Bearer ")) {
-
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token =
-                authorizationHeader.substring(7);
+        String token = authorizationHeader.substring(7);
 
         try {
-
-            String email =
-                    jwtService.extractEmail(token);
+            String email = jwtService.extractEmail(token);
+            UUID userUuid = jwtService.extractUserUuid(token);
 
             if (email != null
-                    && SecurityContextHolder
-                    .getContext()
+                    && SecurityContextHolder.getContext()
                     .getAuthentication() == null) {
 
                 Optional<User> optionalUser =
-        userRepository.findByEmail(email);
+                        userRepository.findByEmail(email);
 
                 if (optionalUser.isPresent()) {
-
                     User user = optionalUser.get();
 
-                    if (jwtService.isTokenValid(token, user)) {
+                    boolean uuidMatches =
+                            userUuid.equals(user.getUserUuid());
+
+                    if (uuidMatches
+                            && jwtService.isTokenValid(token, user)) {
 
                         String role = user.getRole();
-System.out.println("JWT USER: " + user.getEmail() + " | ROLE: " + role);
-
 
                         SimpleGrantedAuthority authority =
-                                new SimpleGrantedAuthority(
-                                        "ROLE_" + role
-                                );
+                                new SimpleGrantedAuthority("ROLE_" + role);
 
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(
@@ -89,8 +84,7 @@ System.out.println("JWT USER: " + user.getEmail() + " | ROLE: " + role);
                                         List.of(authority)
                                 );
 
-                        SecurityContextHolder
-                                .getContext()
+                        SecurityContextHolder.getContext()
                                 .setAuthentication(authentication);
                     }
                 }

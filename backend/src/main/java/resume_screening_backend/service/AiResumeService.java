@@ -2,6 +2,8 @@ package resume_screening_backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
@@ -24,6 +26,7 @@ import resume_screening_backend.entity.ResumeEmbedding;
 import resume_screening_backend.entity.Skill;
 import resume_screening_backend.repository.ResumeEmbeddingRepository;
 import resume_screening_backend.entity.ResumeProfile;
+import resume_screening_backend.repository.ResumeProfileRepository;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,6 +35,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
 
 @Service
 public class AiResumeService {
@@ -46,6 +51,7 @@ private final ResumeProfileService resumeProfileService;
 private final SkillService skillService;
     private final ResumeSkillService resumeSkillService;
     private final ResumeEmbeddingRepository resumeEmbeddingRepository;
+    private final ResumeProfileRepository resumeProfileRepository;
     private final ResumeTextSectionExtractor resumeTextSectionExtractor;
 
     @Value("${ai.service.url:http://localhost:8000}")
@@ -59,6 +65,7 @@ private final SkillService skillService;
         SkillService skillService,
         ResumeSkillService resumeSkillService,
         ResumeEmbeddingRepository resumeEmbeddingRepository,
+        ResumeProfileRepository resumeProfileRepository,
         ResumeTextSectionExtractor resumeTextSectionExtractor) {
 
         this.restTemplate = new RestTemplate();
@@ -71,6 +78,7 @@ this.resumeProfileService = resumeProfileService;
 this.skillService = skillService;
         this.resumeSkillService = resumeSkillService;
         this.resumeEmbeddingRepository = resumeEmbeddingRepository;
+        this.resumeProfileRepository = resumeProfileRepository;
         this.resumeTextSectionExtractor = resumeTextSectionExtractor;
     }
 
@@ -146,6 +154,17 @@ System.out.println("========================================");
         JsonNode parsedResume =
                 root.path("parsedResume");
 
+
+
+System.out.println("========== PARSED RESUME SECTIONS ==========");
+System.out.println("PROJECTS: " + parsedResume.path("projects").toPrettyString());
+System.out.println("CERTIFICATIONS: " + parsedResume.path("certifications").toPrettyString());
+System.out.println("ACHIEVEMENTS: " + parsedResume.path("achievements").toPrettyString());
+System.out.println("EXPERIENCE: " + parsedResume.path("experience").toPrettyString());
+System.out.println("EDUCATION: " + parsedResume.path("education").toPrettyString());
+System.out.println("=============================================");
+
+
                System.out.println("=== RESUME EXTRACTION DEBUG ===");
 System.out.println("Parsed resume: " + parsedResume.toPrettyString());
 System.out.println("Extracted text: " + root.path("extractedText").asText(""));
@@ -155,14 +174,6 @@ System.out.println("Achievements: " + parsedResume.path("achievements"));
 System.out.println("Education: " + parsedResume.path("education"));
 System.out.println("Experience: " + parsedResume.path("experience"));
 System.out.println("================================");
-
-System.out.println("========== PARSED RESUME SECTIONS ==========");
-System.out.println("PROJECTS: " + parsedResume.path("projects").toPrettyString());
-System.out.println("CERTIFICATIONS: " + parsedResume.path("certifications").toPrettyString());
-System.out.println("ACHIEVEMENTS: " + parsedResume.path("achievements").toPrettyString());
-System.out.println("EXPERIENCE: " + parsedResume.path("experience").toPrettyString());
-System.out.println("EDUCATION: " + parsedResume.path("education").toPrettyString());
-System.out.println("=============================================");
 
 
         if (parsedResume.isMissingNode() ||
@@ -248,10 +259,19 @@ System.out.println("=============================================");
 
         JsonNode educationArray = parsedResume.path("education");
 
+System.out.println(
+        "[EDUCATION PARSER DEBUG] AI education: "
+        + educationArray
+);
+
         if (!educationArray.isArray() || educationArray.isEmpty()) {
             educationArray = resumeTextSectionExtractor.extractEducation(
                     root.path("extractedText").asText("")
             );
+            System.out.println(
+    "[EDUCATION FALLBACK DEBUG] Extracted education: "
+    + educationArray
+);
         }
 
         if (educationArray.isArray()) {
@@ -376,6 +396,12 @@ if (certificationsArray.isArray()) {
 }
 
 // Achievements: use structured AI data first, then text fallback.
+System.out.println("=== RESUME EXTRACTED TEXT ===");
+System.out.println(root.path("extractedText").asText(""));
+
+System.out.println("=== AI ACHIEVEMENTS ===");
+System.out.println(parsedResume.path("achievements").toPrettyString());
+
 JsonNode achievementsArray = parsedResume.path("achievements");
 
 if (!achievementsArray.isArray() || achievementsArray.isEmpty()) {
@@ -384,9 +410,31 @@ if (!achievementsArray.isArray() || achievementsArray.isEmpty()) {
     );
 }
 
+ArrayNode normalizedAchievements = objectMapper.createArrayNode();
+
 if (achievementsArray.isArray()) {
-    resumeProfile.setAchievements(achievementsArray);
+    for (JsonNode achievement : achievementsArray) {
+        ObjectNode item = objectMapper.createObjectNode();
+
+        if (achievement.isTextual()) {
+            item.put("title", achievement.asText());
+            item.put("description", "");
+            item.put("date", "");
+            item.put("issuer", "");
+        } else if (achievement.isObject()) {
+            item.put("title", achievement.path("title").asText(""));
+            item.put("description", achievement.path("description").asText(""));
+            item.put("date", achievement.path("date").asText(""));
+            item.put("issuer", achievement.path("issuer").asText(""));
+        } else {
+            continue;
+        }
+
+        normalizedAchievements.add(item);
+    }
 }
+
+resumeProfile.setAchievements(normalizedAchievements);
 System.out.println("=== CONTACT INFO DEBUG ===");
 System.out.println("AI phone: " + getNullableText(parsedResume, "phone"));
 System.out.println("Final phone: " + resumeProfile.getPhone());
@@ -611,6 +659,64 @@ if (experienceArray.isArray()) {
         );
     }
 
+// =========================================================
+// CALL PYTHON AI RESUME MATCHING SERVICE
+// =========================================================
+
+public JsonNode matchResumeWithAI(
+        JsonNode parsedResume,
+        List<String> requirements,
+        String jobDescription) {
+
+    try {
+
+        String url = aiServiceUrl + "/match-resume";
+
+        ObjectNode requestBody = objectMapper.createObjectNode();
+
+        requestBody.set("parsed_resume", parsedResume);
+
+        requestBody.set(
+                "requirements",
+                objectMapper.valueToTree(requirements)
+        );
+
+        requestBody.put("job_description", jobDescription);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<String> request = new HttpEntity<>(
+                objectMapper.writeValueAsString(requestBody),
+                headers
+        );
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        url,
+                        HttpMethod.POST,
+                        request,
+                        String.class
+                );
+
+        if (response.getBody() == null ||
+                response.getBody().isBlank()) {
+
+            throw new RuntimeException(
+                    "Python AI matching service returned an empty response."
+            );
+        }
+
+        return objectMapper.readTree(response.getBody());
+
+    } catch (Exception e) {
+
+        throw new RuntimeException(
+                "Failed to perform AI resume matching: " + e.getMessage(),
+                e
+        );
+    }
+}
     // =============================================================
     // HELPER: GET NULLABLE JSON TEXT
     // =============================================================

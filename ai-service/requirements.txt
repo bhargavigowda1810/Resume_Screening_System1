@@ -7,4 +7,5 @@ pymupdf
 pytesseract
 spacy
 sentence-transformers
-python-dotenv
+python-dotenv 
+httpx

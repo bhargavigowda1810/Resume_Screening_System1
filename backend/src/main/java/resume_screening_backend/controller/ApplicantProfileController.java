@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import resume_screening_backend.entity.ResumeProfile;
 import resume_screening_backend.service.ResumeProfileService;
@@ -41,23 +41,23 @@ public class ApplicantProfileController {
     private final UserService userService;
     private final ExperienceService experienceService;
     private final ResumeProfileService resumeProfileService;
-
+    private final ObjectMapper objectMapper;
 
 public ApplicantProfileController(
         EducationService educationService,
         ResumeService resumeService,
         UserService userService,
-                ExperienceService experienceService,
-        ResumeProfileService resumeProfileService) {
+        ExperienceService experienceService,
+        ResumeProfileService resumeProfileService,
+        ObjectMapper objectMapper) {
 
     this.educationService = educationService;
     this.resumeService = resumeService;
     this.userService = userService;
     this.experienceService = experienceService;
     this.resumeProfileService = resumeProfileService;
-   
+    this.objectMapper = objectMapper;
 }
-
     private Optional<User> currentUser(Authentication authentication) {
         if (authentication == null
                 || !authentication.isAuthenticated()) {
@@ -323,7 +323,13 @@ private ResponseEntity<?> listItems(
         saveArray(profile, idField, items);
     }
 
-    return ResponseEntity.ok(items);
+    return ResponseEntity.ok(
+        objectMapper.convertValue(
+                items,
+                new com.fasterxml.jackson.core.type.TypeReference<
+                        List<Map<String, Object>>>() {}
+        )
+);
 }
 
 private void saveArray(
@@ -363,8 +369,15 @@ ResumeProfile profile = optional.get();
     item.put(idField, UUID.randomUUID().toString());
     items.add(item);
 
-    saveArray(profile, idField, items);
-    return ResponseEntity.ok(items);
+   saveArray(profile, idField, items);
+
+return ResponseEntity.ok(
+        objectMapper.convertValue(
+                items,
+                new com.fasterxml.jackson.core.type.TypeReference<
+                        List<Map<String, Object>>>() {}
+        )
+);
 }
 
 private ResponseEntity<?> editItem(
@@ -399,8 +412,15 @@ ResumeProfile profile = optional.get();
             updated.put(idField, itemId);
             items.set(i, updated);
 
-            saveArray(profile, idField, items);
-            return ResponseEntity.ok(items);
+           saveArray(profile, idField, items);
+
+return ResponseEntity.ok(
+        objectMapper.convertValue(
+                items,
+                new com.fasterxml.jackson.core.type.TypeReference<
+                        List<Map<String, Object>>>() {}
+        )
+);
         }
     }
 

@@ -28,12 +28,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.UUID;
+
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
 
+private final ObjectMapper objectMapper = new ObjectMapper();
 private final UserService userService;
 private final RecruiterProfileRepository recruiterProfileRepository;
 private final JwtService jwtService;
@@ -410,13 +416,21 @@ if (!resumes.isEmpty()) {
             profile.put("github", resumeProfile.getGithub());
             profile.put("portfolio", resumeProfile.getPortfolio());
 
-            profile.put(
+           profile.put(
         "projects",
-        toJsonArray(resumeProfile.getProjects())
+        toJsonArrayWithIds(
+                resumeProfile.getProjects(),
+                "projectId",
+                resumeProfile
+        )
 );
             profile.put(
         "certifications",
-        toJsonArray(resumeProfile.getCertifications())
+        toJsonArrayWithIds(
+                resumeProfile.getCertifications(),
+                "certificationId",
+                resumeProfile
+        )
 );
 
             profile.put(
@@ -761,16 +775,44 @@ private Object toJavaValue(JsonNode node) {
 
     return node.asText();
 }
+private Object toJsonArrayWithIds(
+        JsonNode node,
+        String idField,
+        ResumeProfile resumeProfile) {
+
+    if (node == null || node.isNull() || !node.isArray()) {
+        return new ArrayList<>();
+    }
+
+    ArrayNode updatedArray = objectMapper.createArrayNode();
+    boolean changed = false;
+
+    for (JsonNode item : node) {
+        if (item instanceof ObjectNode original) {
+            ObjectNode copy = original.deepCopy();
+
+            if (!copy.hasNonNull(idField)
+                    || copy.path(idField).asText().isBlank()) {
+
+                copy.put(idField, UUID.randomUUID().toString());
+                changed = true;
+            }
+
+            updatedArray.add(copy);
+        } else {
+            updatedArray.add(item);
+        }
+    }
+
+    if (changed) {
+    if ("projectId".equals(idField)) {
+        resumeProfile.setProjects(updatedArray);
+        resumeProfileService.saveResumeProfile(resumeProfile);
+    } else if ("certificationId".equals(idField)) {
+        resumeProfile.setCertifications(updatedArray);
+        resumeProfileService.saveResumeProfile(resumeProfile);
+    }
 }
-
-
-
-
-
-
-
-
-
-
-
+    return toJsonArray(updatedArray);
+}}
 

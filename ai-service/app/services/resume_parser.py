@@ -197,6 +197,7 @@ def extract_skills(text: str):
 # EDUCATION
 # ============================================================
 
+
 def extract_education(text: str):
 
     section = get_section(
@@ -226,16 +227,26 @@ def extract_education(text: str):
     education = []
 
     degree_patterns = [
-        r"Master(?:'s|’s)?\s+of\s+Computer\s+Application",
-        r"Bachelor(?:'s|’s)?\s+of\s+Computer\s+Application",
+        r"\bBachelor(?:'s|’s)?\s+of\s+Commerce\b",
+        r"\bBachelor(?:'s|’s)?\s+of\s+Science\b",
+        r"\bBachelor(?:'s|’s)?\s+of\s+Arts\b",
+        r"\bBachelor(?:'s|’s)?\s+of\s+Engineering\b",
+        r"\bBachelor(?:'s|’s)?\s+of\s+Computer\s+Application\b",
+        r"\bMaster(?:'s|’s)?\s+of\s+Computer\s+Application\b",
+        r"\bB\.?\s*Tech\b",
+        r"\bM\.?\s*Tech\b",
+        r"\bB\.?\s*E\.?\b",
+        r"\bM\.?\s*E\.?\b",
+        r"\bB\.?\s*Com\.?\b",
+        r"\bM\.?\s*Com\.?\b",
+        r"\bB\.?\s*Sc\.?\b",
+        r"\bM\.?\s*Sc\.?\b",
+        r"\bB\.?\s*A\.?\b",
+        r"\bM\.?\s*A\.?\b",
         r"\bMCA\b",
         r"\bBCA\b",
-        r"\bM\.?Tech\b",
-        r"\bB\.?Tech\b",
         r"\bMBA\b",
-        r"\bM\.?Sc\b",
-        r"\bB\.?Sc\b",
-        r"\bPh\.?D\b",
+        r"\bPh\.?\s*D\.?\b",
         r"\bClass\s+XII\b",
         r"\bClass\s+X\b",
         r"\bSSLC\b",
@@ -243,7 +254,6 @@ def extract_education(text: str):
     ]
 
     def is_degree(line):
-
         return any(
             re.search(pattern, line, re.IGNORECASE)
             for pattern in degree_patterns
@@ -251,11 +261,11 @@ def extract_education(text: str):
 
     def new_record(degree):
 
-        field = None
-
         lower = degree.lower()
 
-        if "computer application" in lower:
+        field = None
+
+        if "computer application" in lower or re.search(r"\b(bca|mca)\b", lower):
             field = "Computer Applications"
 
         elif "computer science" in lower:
@@ -264,14 +274,20 @@ def extract_education(text: str):
         elif "information technology" in lower:
             field = "Information Technology"
 
-        elif "engineering" in lower:
-            field = "Engineering"
-
-        elif "commerce" in lower:
+        elif "commerce" in lower or re.search(r"\b(b\.?\s*com|m\.?\s*com)\b", lower):
             field = "Commerce"
 
-        elif "management" in lower:
+        elif "management" in lower or "mba" in lower:
             field = "Management"
+
+        elif "engineering" in lower or re.search(r"\b(b\.?\s*tech|m\.?\s*tech|b\.?\s*e\.?|m\.?\s*e\.?)\b", lower):
+            field = "Engineering"
+
+        elif "science" in lower or re.search(r"\b(b\.?\s*sc|m\.?\s*sc)\b", lower):
+            field = "Science"
+
+        elif "arts" in lower or re.search(r"\b(b\.?\s*a|m\.?\s*a)\b", lower):
+            field = "Arts"
 
         return {
             "degree": degree,
@@ -284,7 +300,6 @@ def extract_education(text: str):
 
     def clean_institution(line):
 
-        # Remove location at the beginning/end
         line = re.sub(
             r"\bBengaluru\b",
             "",
@@ -292,9 +307,8 @@ def extract_education(text: str):
             flags=re.IGNORECASE
         ).strip()
 
-        # Remove grade from institution
         line = re.sub(
-            r"\bCGPA\s*:\s*[\d.]+\s*/?\s*\d*",
+            r"\bCGPA\s*:?\s*[\d.]+(?:\s*/\s*\d+)?",
             "",
             line,
             flags=re.IGNORECASE
@@ -314,10 +328,6 @@ def extract_education(text: str):
 
     for line in lines:
 
-        # ----------------------------------------------------
-        # New education record
-        # ----------------------------------------------------
-
         if is_degree(line):
 
             if current:
@@ -325,7 +335,6 @@ def extract_education(text: str):
 
             current = new_record(line)
 
-            # Extract years if degree line itself contains them
             years = re.findall(
                 r"\b(?:19|20)\d{2}\b",
                 line
@@ -340,29 +349,18 @@ def extract_education(text: str):
         if current is None:
             continue
 
-        # ----------------------------------------------------
-        # Extract years
-        # ----------------------------------------------------
-
         years = re.findall(
             r"\b(?:19|20)\d{2}\b",
             line
         )
 
         if len(years) >= 2:
-
             current["startYear"] = int(years[0])
             current["endYear"] = int(years[1])
-
             continue
 
-        # ----------------------------------------------------
-        # Extract grade
-        # ----------------------------------------------------
-
         grade_match = re.search(
-            r"CGPA\s*:\s*[\d.]+\s*/?\s*\d*"
-            r"|[\d.]+\s*%",
+            r"CGPA\s*:?\s*[\d.]+(?:\s*/\s*\d+)?|[\d.]+\s*%",
             line,
             re.IGNORECASE
         )
@@ -371,7 +369,6 @@ def extract_education(text: str):
 
             current["grade"] = grade_match.group(0).strip()
 
-            # There may also be an institution on same line
             remaining = line[:grade_match.start()].strip()
 
             if remaining:
@@ -382,30 +379,18 @@ def extract_education(text: str):
 
             continue
 
-        # ----------------------------------------------------
-        # Institution
-        # ----------------------------------------------------
-
-        institution_match = re.search(
-            r"(.+?\b(?:College|School|University|Institute)\b.*)",
+        if re.search(
+            r"\b(?:College|School|University|Institute)\b",
             line,
             re.IGNORECASE
-        )
+        ):
 
-        if institution_match:
-
-            institution = clean_institution(
-                institution_match.group(1)
-            )
+            institution = clean_institution(line)
 
             if institution:
                 current["institution"] = institution
 
             continue
-
-        # ----------------------------------------------------
-        # Field of study
-        # ----------------------------------------------------
 
         if current["fieldOfStudy"] is None:
 
@@ -424,16 +409,64 @@ def extract_education(text: str):
             for field in field_keywords:
 
                 if field.lower() in line.lower():
-
                     current["fieldOfStudy"] = field.title()
-
                     break
 
-    # Save final record
     if current:
         education.append(current)
 
     return education
+
+
+
+# ============================================================
+# CERTIFICATIONS
+# ============================================================
+
+def extract_certifications(text: str):
+
+    section = get_section(
+        text,
+        "Certifications",
+        [
+            "Projects",
+            "Experience",
+            "Education",
+            "Technical Skills",
+            "Skills",
+            "Achievements",
+            "Summary",
+            "Profile"
+        ]
+    )
+
+    if not section:
+        return []
+
+    certifications = []
+
+    for line in section.splitlines():
+
+        line = line.strip()
+
+        # Remove bullet characters and numbering
+        line = re.sub(
+            r"^[•●▪◦\-\*]\s*",
+            "",
+            line
+        )
+
+        line = re.sub(
+            r"^\d+[\.)]\s*",
+            "",
+            line
+        )
+
+        if line:
+            certifications.append(line)
+
+    return certifications
+
 
 # ============================================================
 # PROJECTS
@@ -776,5 +809,6 @@ def parse_resume(text: str):
         "skills": extract_skills(text),
         "education": extract_education(text),
         "experience": extract_experience(text),
-        "projects": extract_projects(text)
+        "projects": extract_projects(text),
+        "certifications": extract_certifications(text)
     }

@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "users")
 public class User {
@@ -12,6 +14,14 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private Long userId;
+
+    @Column(
+    name = "user_uuid",
+    nullable = false,
+    unique = true,
+    updatable = false
+)
+private UUID userUuid = UUID.randomUUID();
 
     @Column(name = "name", nullable = false, length = 150)
     private String name;
@@ -45,9 +55,13 @@ public class User {
     public Long getUserId() {
         return userId;
     }
-    public Long getUserUuid() {
-    return userId;
-}
+    public UUID getUserUuid() {
+    return userUuid;
+    }
+
+    public void setUserUuid(UUID userUuid) {
+    this.userUuid = userUuid;
+    }
 
     public void setUserId(Long userId) {
         this.userId = userId;
