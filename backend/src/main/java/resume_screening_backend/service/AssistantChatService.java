@@ -173,6 +173,38 @@ private Map<String, Object> compareJobSkills(
             List<Job> jobs =
                     jobRepository.findAllByOrderByCreatedAtDesc();
 
+// Retrieve only this applicant's applications
+List<Application> applications =
+        applicationRepository.findByApplicantId(user.getUserId());
+
+// Prepare application details for the chatbot
+List<Map<String, Object>> applicationDetails =
+        new java.util.ArrayList<>();
+
+for (Application application : applications) {
+
+    Map<String, Object> applicationInfo = new HashMap<>();
+
+    applicationInfo.put("applicationId",
+            application.getApplicationId());
+
+    applicationInfo.put("jobId",
+            application.getJobId());
+
+    applicationInfo.put("status",
+            application.getStatus());
+
+    Job appliedJob = jobRepository.findById(application.getJobId())
+            .orElse(null);
+
+    if (appliedJob != null) {
+        applicationInfo.put("jobTitle", appliedJob.getTitle());
+        applicationInfo.put("location", appliedJob.getLocation());
+    }
+
+    applicationDetails.add(applicationInfo);
+}
+
             // 3. Prepare job information for the AI
             List<Map<String, Object>> jobDetails = jobs.stream()
                     .map(job -> Map.<String, Object>ofEntries(
@@ -205,11 +237,12 @@ private Map<String, Object> compareJobSkills(
 
             // 4. Build applicant context
             context = Map.of(
-                    "name", user.getName(),
-                    "role", user.getRole(),
-                    "resumeText", resumeText,
-                    "availableJobRecords", jobDetails
-            );
+        "name", user.getName(),
+        "role", user.getRole(),
+        "resumeText", resumeText,
+        "availableJobRecords", jobDetails,
+        "myApplications", applicationDetails
+);
 
                         } else {
 

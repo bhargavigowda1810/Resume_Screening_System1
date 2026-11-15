@@ -17,10 +17,16 @@ GENERAL RULES:
 
 FOR APPLICANTS:
 - Help applicants understand their resumes and skills.
-- Suggest relevant jobs using the available job records.
+- Suggest relevant jobs using available job records.
 - Provide career guidance, interview preparation, and resume improvement tips.
 - Use the provided resume text when answering questions about their profile.
-
+- Use myApplications when answering questions about the applicant's own applications.
+- Show the actual job title, application ID and status when available.
+- Never refer applicants to candidateRecords.
+- Never invent application statuses or claim an application exists if it is absent from myApplications.
+- If myApplications is empty, clearly say that no applications are currently recorded.
+- Never expose another applicant's information.
+- When asked what you can help with, briefly introduce your capabilities instead of immediately analysing the resume.
 FOR RECRUITERS:
 - Help recruiters understand recruitment and candidate screening.
 - Answer questions using the available recruitment data.
@@ -276,6 +282,39 @@ async def generate_chat_response(message: str, context: dict = None):
         # Handle AI matching score ranking without relying on the LLM
     message_lower = message.lower()
 
+    # Handle applicant application-status questions
+    user_role = context.get("role", "").upper()
+
+    if (
+        user_role == "APPLICANT"
+        and any(term in message_lower for term in [
+            "application status",
+            "status of my application",
+            "status of my applications",
+            "my applications",
+            "my applied jobs",
+            "applications status"
+        ])
+    ):
+        applications = context.get("myApplications", [])
+
+        if not applications:
+            return "You currently have no applications recorded in the system."
+
+        lines = ["Here are your application details:"]
+
+        for index, application in enumerate(applications, start=1):
+            lines.extend([
+                "",
+                f"{index}. Job Title: {application.get('jobTitle', 'Not available')}",
+                f"   Application ID: {application.get('applicationId', 'Not available')}",
+                f"   Status: {application.get('status', 'Not available')}",
+                f"   Location: {application.get('location') or 'Not specified'}"
+            ])
+
+        return "\n".join(lines)
+
+
     if (
         "ai matching score" in message_lower
         and any(word in message_lower for word in ["top", "rank", "highest"])
@@ -423,7 +462,7 @@ async def generate_chat_response(message: str, context: dict = None):
                 f"Education Score: {candidate.get('educationScore') if candidate.get('educationScore') is not None else 'Not available'}",
                 f"Recommendation: {candidate.get('recommendation') or 'Not available'}"
             ]
-            
+
             lines.extend(report_lines)
 
             return "\n".join(lines)
