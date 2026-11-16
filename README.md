@@ -135,27 +135,9 @@ Set the database username and password using the environment variables expected 
 
 ### 2. Backend
 
-Open a terminal inside the backend folder:
-
-```bash
-cd backend
-```
-
-On Windows, start the Spring Boot application using:
-
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
 The backend runs on port **8081**.
 
 ### 3. AI Service
-
-Open another terminal:
-
-```bash
-cd ai-service
-```
 
 Activate the Python virtual environment and install the dependencies from `requirements.txt` if needed.
 
@@ -169,24 +151,9 @@ Make sure Ollama is installed and running.
 
 If the Qwen model has not been downloaded yet, run:
 
-```bash
-ollama pull qwen2.5:3b
-```
-
 ### 5. Frontend
 
-Open another terminal:
-
-```bash
-cd frontend
-```
-
 Install the required packages and start the development server:
-
-```bash
-npm install
-npm run dev
-```
 
 The frontend runs on port **5173** by default.
 
